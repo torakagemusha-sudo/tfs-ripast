@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "seed": "ripast-public-v1",
+  "repetitions": 1,
+  "model": "configure-with---agent-command",
+  "fixtureRoot": "fixtures",
+  "pairs": [
+    { "workload": "textual-configuration-migration", "a": "textual-a", "b": "textual-b" }
+  ],
+  "timeoutMs": 900000
+}

@@ -1,0 +1,81 @@
+#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+
+const args = process.argv.slice(2);
+if (process.env.FAKE_PROVIDER_LOG) {
+  appendFileSync(process.env.FAKE_PROVIDER_LOG, `${JSON.stringify(args)}\n`);
+}
+
+if (args.length === 1 && args[0] === "--version") {
+  process.stdout.write("ast-grep 88.0.0\n");
+  process.exit(0);
+}
+
+switch (process.env.FAKE_PROVIDER_MODE) {
+  case "no-matches":
+    process.exit(1);
+  case "error":
+    process.stderr.write("pattern could not be parsed\n");
+    process.exit(2);
+  case "scan-error":
+    process.stderr.write("permission denied while reading source\n");
+    process.exit(2);
+  case "malformed":
+    process.stdout.write("{not-json}\n");
+    process.exit(0);
+  case "malformed-capture":
+    process.stdout.write(`${JSON.stringify({
+      text: "foo(bar)",
+      range: {
+        byteOffset: { start: 14, end: 22 },
+        start: { line: 0, column: 14 },
+        end: { line: 0, column: 22 },
+      },
+      file: "src/app.ts",
+      metaVariables: { multi: { ARG: [{}] } },
+    })}\n`);
+    process.exit(0);
+  case "timeout":
+    setTimeout(() => process.exit(0), 5_000);
+    break;
+  case "stubborn": {
+    const markerDelay = Number(process.env.FAKE_PROVIDER_MARKER_DELAY ?? "250");
+    const descendantCode = process.env.FAKE_PROVIDER_MARKER
+      ? `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(process.env.FAKE_PROVIDER_MARKER)}, 'survived'), ${String(markerDelay)})`
+      : "setTimeout(() => {}, 2000)";
+    const descendant = spawn(process.execPath, ["-e", descendantCode], {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    descendant.unref();
+    process.on("SIGTERM", () => undefined);
+    setInterval(() => undefined, 1_000);
+    break;
+  }
+  default:
+    process.stdout.write(`${JSON.stringify({
+      text: "foo(bar)",
+      range: {
+        byteOffset: { start: 14, end: 22 },
+        start: { line: 0, column: 14 },
+        end: { line: 0, column: 22 },
+      },
+      file: "src/app.ts",
+      lines: "const value = foo(bar);",
+      language: "TypeScript",
+      metaVariables: {
+        single: {
+          ARG: {
+            text: "bar",
+            range: {
+              byteOffset: { start: 18, end: 21 },
+              start: { line: 0, column: 18 },
+              end: { line: 0, column: 21 },
+            },
+          },
+        },
+        multi: {},
+        transformed: {},
+      },
+    })}\n`);
+}

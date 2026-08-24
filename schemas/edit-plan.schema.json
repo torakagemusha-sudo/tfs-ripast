@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://torafirma.dev/schemas/tfs-ripast/edit-plan/v1",
+  "title": "TFS Ripast EditPlan",
+  "x-tfs-ripast-semantic-validation": "https://torafirma.dev/schemas/tfs-ripast/semantic-validation/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "rewritePlan", "rewritePlanHash", "gitScope", "inputFiles", "evidence", "edits", "conflicts", "diagnostics", "providerVersions", "createdAt"],
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "$ref": "#/$defs/nonblank" },
+    "rewritePlan": { "$ref": "https://torafirma.dev/schemas/tfs-ripast/rewrite-plan/v1" },
+    "rewritePlanHash": { "$ref": "#/$defs/nonblank" },
+    "gitScope": { "$ref": "#/$defs/gitScopeAudit" },
+    "inputFiles": { "type": "array", "items": { "$ref": "#/$defs/fileInput" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/matchEvidence" } },
+    "edits": { "type": "array", "items": { "$ref": "#/$defs/edit" } },
+    "conflicts": { "type": "array", "items": { "$ref": "#/$defs/conflict" } },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+    "providerVersions": { "type": "object", "additionalProperties": { "type": "string" } },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "nonblank": { "type": "string", "pattern": ".*\\S.*" },
+    "relativePath": { "allOf": [{ "$ref": "#/$defs/nonblank" }, { "type": "string", "maxLength": 4096, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000-\\u001F]+$" }] },
+    "nonnegativeInteger": { "type": "integer", "minimum": 0 },
+    "range": { "type": "array", "minItems": 2, "maxItems": 2, "prefixItems": [{ "$ref": "#/$defs/nonnegativeInteger" }, { "$ref": "#/$defs/nonnegativeInteger" }], "items": false },
+    "fileInput": { "type": "object", "additionalProperties": false, "required": ["path", "hash", "byteLength", "mode", "newline", "encoding"], "properties": { "path": { "$ref": "#/$defs/relativePath" }, "hash": { "$ref": "#/$defs/nonblank" }, "byteLength": { "$ref": "#/$defs/nonnegativeInteger" }, "mode": { "$ref": "#/$defs/nonnegativeInteger" }, "newline": { "enum": ["lf", "crlf", "mixed", "none"] }, "encoding": { "enum": ["utf-8", "binary", "other"] } } },
+    "gitScopeAudit": { "type": "object", "additionalProperties": false, "required": ["repository", "root", "dirty", "mode", "requireClean", "inputs"], "properties": { "repository": { "type": "boolean" }, "root": { "$ref": "#/$defs/nonblank" }, "repositoryRoot": { "$ref": "#/$defs/nonblank" }, "head": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }, "sinceCommit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }, "dirty": { "type": "boolean" }, "mode": { "enum": ["all", "tracked", "changed", "staged", "since"] }, "requireClean": { "type": "boolean" }, "inputs": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "worktreeBlob"], "properties": { "path": { "$ref": "#/$defs/relativePath" }, "worktreeBlob": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }, "indexBlob": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" } } } } }, "allOf": [{ "if": { "properties": { "repository": { "const": true } }, "required": ["repository"] }, "then": { "properties": { "repositoryRoot": true }, "required": ["repositoryRoot"] }, "else": { "properties": { "inputs": { "type": "array", "maxItems": 0 }, "requireClean": { "type": "boolean", "const": false } } } }, { "if": { "properties": { "mode": { "const": "since" } }, "required": ["mode"] }, "then": { "properties": { "sinceCommit": true }, "required": ["sinceCommit"] }, "else": { "not": { "required": ["sinceCommit"] } } }] },
+    "matchEvidence": { "type": "object", "additionalProperties": false, "required": ["id", "operationId", "provider", "file", "byteRange", "lineRange", "matchedTextHash", "languageSource", "confidence"], "properties": { "id": { "$ref": "#/$defs/nonblank" }, "operationId": { "$ref": "#/$defs/nonblank" }, "provider": { "$ref": "#/$defs/nonblank" }, "file": { "$ref": "#/$defs/relativePath" }, "byteRange": { "$ref": "#/$defs/range" }, "lineRange": { "$ref": "#/$defs/range" }, "matchedTextHash": { "$ref": "#/$defs/nonblank" }, "language": { "enum": ["javascript", "jsx", "typescript", "tsx", "python", "rust", "go", "java", "c", "cpp", "csharp", "ruby", "swift", "kotlin", "scala", "html", "css", "json", "yaml"] }, "languageSource": { "enum": ["extension", "override", "ambiguous", "unsupported"] }, "captures": { "type": "object", "additionalProperties": { "type": "string" } }, "confidence": { "enum": ["lexical", "structural", "semantic"] } } },
+    "edit": { "type": "object", "additionalProperties": false, "required": ["id", "operationIds", "file", "byteRange", "replacement", "evidenceIds"], "properties": { "id": { "$ref": "#/$defs/nonblank" }, "operationIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/nonblank" } }, "file": { "$ref": "#/$defs/relativePath" }, "byteRange": { "$ref": "#/$defs/range" }, "replacement": { "type": "string" }, "evidenceIds": { "type": "array", "items": { "$ref": "#/$defs/nonblank" } } } },
+    "conflict": { "type": "object", "additionalProperties": false, "required": ["id", "editIds", "reason"], "properties": { "id": { "$ref": "#/$defs/nonblank" }, "editIds": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/nonblank" } }, "reason": { "enum": ["same-range", "partial-overlap", "nested-overlap"] } } },
+    "diagnostic": { "type": "object", "additionalProperties": false, "required": ["code", "message", "paths"], "properties": { "code": { "$ref": "#/$defs/nonblank" }, "message": { "$ref": "#/$defs/nonblank" }, "provider": { "$ref": "#/$defs/nonblank" }, "operationId": { "$ref": "#/$defs/nonblank" }, "language": { "enum": ["javascript", "jsx", "typescript", "tsx", "python", "rust", "go", "java", "c", "cpp", "csharp", "ruby", "swift", "kotlin", "scala", "html", "css", "json", "yaml"] }, "paths": { "type": "array", "items": { "$ref": "#/$defs/relativePath" } } } }
+  }
+}

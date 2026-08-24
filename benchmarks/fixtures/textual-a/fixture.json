@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "textual-a",
+  "workload": "textual-configuration-migration",
+  "allowedPaths": ["src/config.ts"],
+  "acceptance": {
+    "files": [
+      {
+        "path": "src/config.ts",
+        "contains": ["safeMode: true", "safeMode: boolean", "value.safeMode", "\"legacyMode\""],
+        "excludes": ["legacyMode: boolean", "value.legacyMode"]
+      }
+    ]
+  }
+}

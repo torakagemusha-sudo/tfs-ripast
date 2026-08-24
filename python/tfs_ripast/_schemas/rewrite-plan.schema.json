@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://torafirma.dev/schemas/tfs-ripast/rewrite-plan/v1",
+  "title": "TFS Ripast RewritePlan",
+  "x-tfs-ripast-semantic-validation": "https://torafirma.dev/schemas/tfs-ripast/semantic-validation/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "root", "operations", "policy", "validations"],
+  "properties": {
+    "version": { "const": 1 },
+    "name": { "$ref": "#/$defs/nonblank" },
+    "root": { "$ref": "#/$defs/nonblank" },
+    "operations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rewriteOperation" }
+    },
+    "policy": { "$ref": "#/$defs/rewritePolicy" },
+    "validations": { "type": "array", "items": { "$ref": "#/$defs/validationSpec" } }
+  },
+  "$defs": {
+    "nonblank": { "type": "string", "pattern": ".*\\S.*" },
+    "nonnegativeInteger": { "type": "integer", "minimum": 0 },
+    "repositoryRelativePath": {
+      "allOf": [
+        { "$ref": "#/$defs/nonblank" },
+        { "type": "string", "maxLength": 4096, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000-\\u001F]+$" }
+      ]
+    },
+    "astGrepLanguage": {
+      "enum": ["javascript", "jsx", "typescript", "tsx", "python", "rust", "go", "java", "c", "cpp", "csharp", "ruby", "swift", "kotlin", "scala", "html", "css", "json", "yaml"]
+    },
+    "languageOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["glob", "language"],
+      "properties": { "glob": { "$ref": "#/$defs/nonblank" }, "language": { "$ref": "#/$defs/astGrepLanguage" } }
+    },
+    "lexicalMode": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "literal" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "regex" }, "flags": { "type": "string" } } }
+      ]
+    },
+    "replacement": {
+      "type": "string",
+      "description": "Capture references are limited to ${NAME}; other dollar text is literal.",
+      "pattern": "^(?:[^$]|\\$(?!\\{)|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})*$"
+    },
+    "expectedCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "exact": { "$ref": "#/$defs/nonnegativeInteger" },
+        "min": { "$ref": "#/$defs/nonnegativeInteger" },
+        "max": { "$ref": "#/$defs/nonnegativeInteger" }
+      },
+      "allOf": [
+        { "not": { "type": "object", "properties": { "exact": true, "min": true }, "required": ["exact", "min"] } },
+        { "not": { "type": "object", "properties": { "exact": true, "max": true }, "required": ["exact", "max"] } }
+      ]
+    },
+    "rewriteOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "paths", "search", "replace", "lexical"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonblank" },
+        "paths": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/repositoryRelativePath" } },
+        "search": { "$ref": "#/$defs/nonblank" },
+        "replace": { "$ref": "#/$defs/replacement" },
+        "lexical": { "$ref": "#/$defs/lexicalMode" },
+        "languages": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/astGrepLanguage" } },
+        "languageOverrides": { "type": "array", "items": { "$ref": "#/$defs/languageOverride" } },
+        "globs": { "type": "array", "items": { "$ref": "#/$defs/nonblank" } },
+        "matchPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "require": { "enum": ["eligible", "confirmed", "structural", "lexical"] }, "onUnparseable": { "enum": ["allow", "skip", "error"] } }
+        },
+        "expectedCount": { "$ref": "#/$defs/expectedCount" },
+        "conflictPolicy": { "type": "object", "additionalProperties": false, "properties": { "onConflict": { "const": "reject" } } }
+      }
+    },
+    "rewritePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxFiles": { "$ref": "#/$defs/nonnegativeInteger" },
+        "maxMatches": { "$ref": "#/$defs/nonnegativeInteger" },
+        "maxChangedBytes": { "$ref": "#/$defs/nonnegativeInteger" },
+        "maxRepositoryPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "respectGitIgnore": { "type": "boolean" },
+        "requireClean": { "type": "boolean" },
+        "keepOnCheckFailure": { "type": "boolean" }
+      }
+    },
+    "validationCommon": {
+      "properties": {
+        "cwd": { "$ref": "#/$defs/repositoryRelativePath" },
+        "timeoutMs": { "$ref": "#/$defs/nonnegativeInteger" },
+        "maxOutputBytes": { "type": "integer", "minimum": 0, "maximum": 1048576 }
+      }
+    },
+    "validationSpec": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["type"],
+          "properties": { "type": { "const": "prettier" }, "paths": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/repositoryRelativePath" } }, "cwd": { "$ref": "#/$defs/repositoryRelativePath" }, "timeoutMs": { "$ref": "#/$defs/nonnegativeInteger" }, "maxOutputBytes": { "type": "integer", "minimum": 0, "maximum": 1048576 } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["type"],
+          "properties": { "type": { "enum": ["npm-test", "typescript-typecheck"] }, "cwd": { "$ref": "#/$defs/repositoryRelativePath" }, "timeoutMs": { "$ref": "#/$defs/nonnegativeInteger" }, "maxOutputBytes": { "type": "integer", "minimum": 0, "maximum": 1048576 } }
+        }
+      ]
+    }
+  }
+}

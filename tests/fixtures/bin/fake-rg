@@ -1,0 +1,79 @@
+#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+
+const args = process.argv.slice(2);
+if (process.env.FAKE_PROVIDER_LOG) {
+  appendFileSync(process.env.FAKE_PROVIDER_LOG, `${JSON.stringify(args)}\n`);
+}
+
+if (args.length === 1 && args[0] === "--version") {
+  process.stdout.write("ripgrep 99.0.0 (fake)\n");
+  process.exit(0);
+}
+
+switch (process.env.FAKE_PROVIDER_MODE) {
+  case "no-matches":
+    process.exit(1);
+  case "error":
+    process.stderr.write("fake ripgrep failure\n");
+    process.exit(2);
+  case "malformed":
+    process.stdout.write("{not-json}\n");
+    process.exit(0);
+  case "timeout":
+    setTimeout(() => process.exit(0), 5_000);
+    break;
+  case "stubborn": {
+    const markerDelay = Number(process.env.FAKE_PROVIDER_MARKER_DELAY ?? "250");
+    const descendantCode = process.env.FAKE_PROVIDER_MARKER
+      ? `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(process.env.FAKE_PROVIDER_MARKER)}, 'survived'), ${String(markerDelay)})`
+      : "setTimeout(() => {}, 2000)";
+    const descendant = spawn(process.execPath, ["-e", descendantCode], {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    descendant.unref();
+    process.on("SIGTERM", () => undefined);
+    setInterval(() => undefined, 1_000);
+    setTimeout(() => process.exit(0), 1_500);
+    break;
+  }
+  case "overflow":
+    process.stdout.write("x".repeat(4_096));
+    break;
+  case "bytes":
+    process.stdout.write(`${JSON.stringify({
+      type: "match",
+      data: {
+        path: { text: "src/app.ts" },
+        lines: { bytes: "/yBmb28oYmFyKQo=" },
+        line_number: 1,
+        absolute_offset: 0,
+        submatches: [{ match: { bytes: "Zm9vKGJhcik=" }, start: 2, end: 10 }],
+      },
+    })}\n`);
+    break;
+  case "path-bytes":
+    process.stdout.write(`${JSON.stringify({
+      type: "match",
+      data: {
+        path: { bytes: "/w==" },
+        lines: { text: "foo(bar)\n" },
+        line_number: 1,
+        absolute_offset: 0,
+        submatches: [{ match: { text: "foo(bar)" }, start: 0, end: 8 }],
+      },
+    })}\n`);
+    break;
+  default:
+    process.stdout.write(`${JSON.stringify({
+      type: "match",
+      data: {
+        path: { text: process.env.FAKE_PROVIDER_PATH ?? "src/app.ts" },
+        lines: { text: "é foo(bar)\r\n" },
+        line_number: 4,
+        absolute_offset: 10,
+        submatches: [{ match: { text: "foo(bar)" }, start: 3, end: 11 }],
+      },
+    })}\n`);
+}

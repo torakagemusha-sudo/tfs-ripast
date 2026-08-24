@@ -1,0 +1,42 @@
+{
+  "name": "@torafirma/tfs-ripast",
+  "version": "0.1.0",
+  "description": "Safety-first repository-scale search, rewrite planning, validation, and rollback",
+  "license": "MIT",
+  "author": "ToraFirma contributors",
+  "homepage": "https://github.com/torakagemusha-sudo/tfs-ripast#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/torakagemusha-sudo/tfs-ripast.git"
+  },
+  "bugs": {
+    "url": "https://github.com/torakagemusha-sudo/tfs-ripast/issues"
+  },
+  "keywords": ["rewrite", "refactoring", "ast-grep", "ripgrep", "codemod", "cli"],
+  "files": ["dist/", "schemas/", "benchmarks/", "README.md", "LICENSE"],
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "bin": {
+    "tfs-ripast": "dist/cli.js",
+    "rpst": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "benchmark": "node dist/benchmark/cli.js",
+    "benchmark:self-test": "npm run build && node dist/benchmark/cli.js --self-test --output benchmark-results/self-test",
+    "docs:check": "node scripts/check-docs.mjs",
+    "docs:build": "python -m sphinx -W --keep-going -b html docs docs/_build/html",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "publishConfig": { "access": "public", "provenance": true },
+  "packageManager": "npm@11.17.0",
+  "dependencies": { "zod": "^4.0.0" },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "ajv": "^8.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

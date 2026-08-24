@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "textual-b",
+  "workload": "textual-configuration-migration",
+  "allowedPaths": ["src/settings.ts"],
+  "acceptance": {
+    "files": [
+      {
+        "path": "src/settings.ts",
+        "contains": ["verifiedDefault: false", "verifiedDefault: boolean", "value.verifiedDefault", "\"unsafeDefault\""],
+        "excludes": ["unsafeDefault: boolean", "value.unsafeDefault"]
+      }
+    ]
+  }
+}

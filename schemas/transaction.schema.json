@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://torafirma.dev/schemas/tfs-ripast/transaction/v1",
+  "title": "TFS Ripast TransactionRecord",
+  "x-tfs-ripast-semantic-validation": "https://torafirma.dev/schemas/tfs-ripast/semantic-validation/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "editPlanHash", "gitScope", "validationPolicy", "changedPaths", "files", "validations", "inversePatch", "startedAt", "state"],
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "$ref": "#/$defs/nonblank" },
+    "editPlanHash": { "$ref": "#/$defs/nonblank" },
+    "gitScope": { "$ref": "#/$defs/gitScopeAudit" },
+    "validationPolicy": { "$ref": "#/$defs/validationPolicy" },
+    "changedPaths": { "type": "array", "items": { "$ref": "#/$defs/relativePath" } },
+    "files": { "type": "array", "items": { "$ref": "#/$defs/transactionFile" } },
+    "validations": { "type": "array", "items": { "$ref": "#/$defs/validationResult" } },
+    "inversePatch": { "type": "string" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "state": { "enum": ["prepared", "committed", "rolled-back", "partial-commit", "undone", "failed"] }
+  },
+  "$defs": {
+    "nonblank": { "type": "string", "pattern": ".*\\S.*" },
+    "relativePath": { "allOf": [{ "$ref": "#/$defs/nonblank" }, { "type": "string", "maxLength": 4096, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000-\\u001F]+$" }] },
+    "gitScopeAudit": { "type": "object", "additionalProperties": false, "required": ["repository", "root", "dirty", "mode", "requireClean", "inputs"], "properties": { "repository": { "type": "boolean" }, "root": { "$ref": "#/$defs/nonblank" }, "repositoryRoot": { "$ref": "#/$defs/nonblank" }, "head": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }, "sinceCommit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }, "dirty": { "type": "boolean" }, "mode": { "enum": ["all", "tracked", "changed", "staged", "since"] }, "requireClean": { "type": "boolean" }, "inputs": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "worktreeBlob"], "properties": { "path": { "$ref": "#/$defs/relativePath" }, "worktreeBlob": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }, "indexBlob": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" } } } } }, "allOf": [{ "if": { "properties": { "repository": { "const": true } }, "required": ["repository"] }, "then": { "properties": { "repositoryRoot": true }, "required": ["repositoryRoot"] }, "else": { "properties": { "inputs": { "type": "array", "maxItems": 0 }, "requireClean": { "type": "boolean", "const": false } } } }, { "if": { "properties": { "mode": { "const": "since" } }, "required": ["mode"] }, "then": { "properties": { "sinceCommit": true }, "required": ["sinceCommit"] }, "else": { "not": { "required": ["sinceCommit"] } } }] },
+    "validationPolicy": { "type": "object", "additionalProperties": false, "required": ["keepOnCheckFailure", "rollbackPolicy", "authority"], "properties": { "keepOnCheckFailure": { "type": "boolean" }, "rollbackPolicy": { "enum": ["rollback-on-failure", "keep-on-failure"] }, "authority": { "enum": ["default", "plan", "cli-override", "runtime-override"] } } },
+    "transactionFile": { "type": "object", "additionalProperties": false, "required": ["path", "beforeHash", "afterHash", "beforeMode", "afterMode"], "properties": { "path": { "$ref": "#/$defs/relativePath" }, "beforeHash": { "$ref": "#/$defs/nonblank" }, "afterHash": { "$ref": "#/$defs/nonblank" }, "beforeMode": { "type": "integer", "minimum": 0, "maximum": 4095 }, "afterMode": { "type": "integer", "minimum": 0, "maximum": 4095 } } },
+    "validationResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "adapter", "executable", "argv", "cwd", "actualCwd", "timeoutMs", "stage", "rollbackPolicy", "timedOut", "truncated", "status", "exitCode", "output"],
+          "properties": {
+            "source": { "const": "named-adapter" },
+            "adapter": { "enum": ["prettier", "npm-test", "typescript-typecheck", "ast-grep-syntax", "transaction-integrity"] },
+            "executable": { "allOf": [{ "$ref": "#/$defs/nonblank" }, { "type": "string", "maxLength": 4096 }] },
+            "argv": { "type": "array", "maxItems": 256, "items": { "type": "string", "maxLength": 16384 } },
+            "cwd": { "$ref": "#/$defs/relativePath" },
+            "actualCwd": { "allOf": [{ "$ref": "#/$defs/nonblank" }, { "type": "string", "maxLength": 4096 }] },
+            "timeoutMs": { "type": "integer", "minimum": 0 },
+            "stage": { "enum": ["precommit", "postcommit"] },
+            "rollbackPolicy": { "enum": ["not-applicable", "rollback-on-failure", "keep-on-failure"] },
+            "configResolution": { "type": "string", "maxLength": 16384 },
+            "timedOut": { "type": "boolean" },
+            "truncated": { "type": "boolean" },
+            "status": { "enum": ["passed", "failed", "timed-out", "spawn-error", "unsupported"] },
+            "exitCode": { "type": ["integer", "null"] },
+            "output": { "type": "string", "maxLength": 1048576 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "executable", "argv", "cwd", "actualCwd", "timeoutMs", "stage", "rollbackPolicy", "timedOut", "truncated", "status", "exitCode", "output"],
+          "properties": {
+            "source": { "const": "explicit-command" },
+            "executable": { "allOf": [{ "$ref": "#/$defs/nonblank" }, { "type": "string", "maxLength": 4096 }] },
+            "argv": { "type": "array", "maxItems": 256, "items": { "type": "string", "maxLength": 16384 } },
+            "cwd": { "$ref": "#/$defs/relativePath" },
+            "actualCwd": { "allOf": [{ "$ref": "#/$defs/nonblank" }, { "type": "string", "maxLength": 4096 }] },
+            "timeoutMs": { "type": "integer", "minimum": 0 },
+            "stage": { "enum": ["precommit", "postcommit"] },
+            "rollbackPolicy": { "enum": ["not-applicable", "rollback-on-failure", "keep-on-failure"] },
+            "configResolution": { "type": "string", "maxLength": 16384 },
+            "timedOut": { "type": "boolean" },
+            "truncated": { "type": "boolean" },
+            "status": { "enum": ["passed", "failed", "timed-out", "spawn-error", "unsupported"] },
+            "exitCode": { "type": ["integer", "null"] },
+            "output": { "type": "string", "maxLength": 1048576 }
+          }
+        }
+      ]
+    }
+  }
+}

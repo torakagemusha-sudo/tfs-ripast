@@ -1,0 +1,18 @@
+{
+  "semanticValidationContract": "https://torafirma.dev/schemas/tfs-ripast/semantic-validation/v1",
+  "paths": {
+    "safe": [".", "src/app.ts", "fixtures/a b.json"],
+    "unsafe": ["../outside", "/absolute", "src\\app.ts", "src/line\nfeed.ts", "src/nul\u0000byte.ts"]
+  },
+  "crossObjectFailures": [
+    "duplicate operation IDs",
+    "duplicate evidence IDs",
+    "duplicate edit IDs",
+    "duplicate conflict IDs",
+    "unknown operation references",
+    "unknown evidence references",
+    "unknown conflict edit references",
+    "range start greater than end",
+    "expectedCount min greater than max"
+  ]
+}
