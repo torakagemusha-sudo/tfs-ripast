@@ -2,8 +2,8 @@
   "name": "@torafirma/tfs-ripast",
   "version": "0.1.0",
   "description": "Safety-first repository-scale search, rewrite planning, validation, and rollback",
-  "license": "MIT",
-  "author": "ToraFirma contributors",
+  "license": "Apache-2.0",
+  "author": "Torafirma Systems",
   "homepage": "https://github.com/torakagemusha-sudo/tfs-ripast#readme",
   "repository": {
     "type": "git",

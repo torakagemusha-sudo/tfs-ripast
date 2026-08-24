@@ -1,6 +1,6 @@
 project = "TFS Ripast"
-copyright = "2026, ToraFirma contributors"
-author = "ToraFirma contributors"
+copyright = "2026, Torafirma Systems"
+author = "Torafirma Systems"
 release = "0.1.0"
 
 extensions = ["myst_parser"]

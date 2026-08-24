@@ -126,4 +126,4 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). By participating, you agree to follow 
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+Apache-2.0. See [`LICENSE`](LICENSE).
