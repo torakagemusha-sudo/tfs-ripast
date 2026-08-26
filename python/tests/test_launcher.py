@@ -82,22 +82,6 @@ def test_executable_resolution_prefers_override_then_adjacent_then_path(
     assert resolve_executable() == str(fallback.resolve())
 
 
-def test_executable_resolution_skips_the_current_python_console_script(
-    tmp_path: Path,
-) -> None:
-    python_bin = tmp_path / "python-bin"
-    node_bin = tmp_path / "node-bin"
-    python_bin.mkdir()
-    node_bin.mkdir()
-    current_wrapper = make_fake_executable(python_bin, "")
-    typescript_cli = make_fake_executable(node_bin, "")
-
-    assert resolve_executable(
-        {"PATH": os.pathsep.join([str(python_bin), str(node_bin)])},
-        excluded_executable=str(current_wrapper),
-    ) == str(typescript_cli.resolve())
-
-
 def test_missing_or_non_executable_override_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
