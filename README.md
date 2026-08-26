@@ -49,6 +49,7 @@ This is infrastructure, not a general-purpose pattern language. Pattern power co
 
 | Dependency | Purpose |
 |------------|---------|
+| **Host** | Linux, macOS, or WSL; native Windows is unsupported |
 | **Node.js ≥ 24** | Runtime |
 | **`rg` (ripgrep)** on `PATH` | Lexical discovery |
 | **`ast-grep` 0.45.1** on `PATH` | Structural evidence (optional for pure lexical work) |
@@ -83,6 +84,9 @@ tfs-ripast-py --version
 
 `tfs-ripast-py` delegates to the installed Node CLI without shadowing its
 `rpst` or `tfs-ripast` commands.
+
+Native Windows is unsupported because Ripast cannot yet enforce its required
+descendant-process containment there. Use WSL for Windows-hosted workflows.
 
 ---
 

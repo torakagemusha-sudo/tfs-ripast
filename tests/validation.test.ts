@@ -303,6 +303,15 @@ describe("validation invocation authority", () => {
 });
 
 describe("bounded process trees", () => {
+  it("excludes hosts where process-tree containment is unavailable from package installs", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "package.json"), "utf8"),
+    ) as { os?: string[] };
+
+    expect(() => assertProcessContainmentSupported("win32")).toThrow();
+    expect(manifest.os ?? []).toContain("!win32");
+  });
+
   it("fails closed before spawn when process-group descendant containment is unavailable on Windows", async () => {
     expect(() => assertProcessContainmentSupported("win32"))
       .toThrow(/windows|containment|unsupported|refus/i);
@@ -320,7 +329,8 @@ describe("bounded process trees", () => {
 
   it("handles a closed child stdin without an unhandled EPIPE and enforces the input cap", async () => {
     const input = Buffer.alloc(16 * 1024 * 1024, 0x78);
-    const result = await runArgumentVector("/bin/true", [], {
+    const exitsImmediately = ["-e", "process.exit(0)"];
+    const result = await runArgumentVector(process.execPath, exitsImmediately, {
       cwd: process.cwd(),
       timeoutMs: 2_000,
       maxOutputBytes: 1_024,
@@ -331,7 +341,7 @@ describe("bounded process trees", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdinError).toBe(true);
     expect(Buffer.byteLength(result.stderr)).toBeLessThanOrEqual(1_024);
-    await expect(runArgumentVector("/bin/true", [], {
+    await expect(runArgumentVector(process.execPath, exitsImmediately, {
       cwd: process.cwd(),
       timeoutMs: 2_000,
       maxOutputBytes: 1_024,

@@ -36,6 +36,9 @@
   "engines": {
     "node": ">=24"
   },
+  "os": [
+    "!win32"
+  ],
   "bin": {
     "tfs-ripast": "dist/cli.js",
     "rpst": "dist/cli.js"

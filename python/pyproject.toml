@@ -25,7 +25,7 @@ Repository = "https://github.com/torakagemusha-sudo/tfs-ripast.git"
 Issues = "https://github.com/torakagemusha-sudo/tfs-ripast/issues"
 
 [project.optional-dependencies]
-test = ["pytest>=8,<10"]
+test = ["pytest>=8,<10", "build>=1,<2"]
 docs = ["Sphinx>=7,<9", "myst-parser>=3,<5"]
 
 [tool.setuptools.packages.find]

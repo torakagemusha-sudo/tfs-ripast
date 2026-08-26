@@ -52,6 +52,46 @@ PY_VER="$("$PY_LAUNCHER" --version)"
 # A reinstall may replace generated targets.
 HOME="$HOME_DIR" "$INSTALLER" --prefix "$PREFIX"
 
+# The documented macOS install path must accept BSD stat(1), whose format
+# option is -f rather than GNU stat's -c.
+BSD_STAT_BIN="$TMP/bsd-stat-bin"
+BSD_STAT_PREFIX="$TMP/bsd-stat-prefix"
+BSD_STAT_HOME="$TMP/bsd-stat-home"
+mkdir -p "$BSD_STAT_BIN" "$BSD_STAT_HOME"
+cat >"$BSD_STAT_BIN/stat" <<'EOF'
+#!/bin/sh
+if [ "${1-}" = "-c" ]; then
+  exit 64
+fi
+if [ "${1-}" != "-f" ]; then
+  exit 65
+fi
+format="$2"
+shift 2
+case "$format" in
+  '%Sp') exec python3 -c 'import os, stat, sys; print(stat.filemode(os.stat(sys.argv[1]).st_mode))' "$1" ;;
+  '%d:%i') exec python3 -c 'import os, sys; value = os.stat(sys.argv[1]); print(f"{value.st_dev}:{value.st_ino}")' "$1" ;;
+  *) exit 66 ;;
+esac
+EOF
+chmod +x "$BSD_STAT_BIN/stat"
+HOME="$BSD_STAT_HOME" PATH="$BSD_STAT_BIN:$PATH" "$INSTALLER" --prefix "$BSD_STAT_PREFIX"
+[ -x "$BSD_STAT_PREFIX/bin/tfs-ripast" ] || fail "BSD stat install did not publish tfs-ripast"
+
+# Older macOS releases do not provide realpath(1); Python is already a required
+# installer dependency and must supply the canonicalization fallback.
+NO_REALPATH_BIN="$TMP/no-realpath-bin"
+NO_REALPATH_PREFIX="$TMP/no-realpath-prefix"
+NO_REALPATH_HOME="$TMP/no-realpath-home"
+mkdir -p "$NO_REALPATH_BIN" "$NO_REALPATH_HOME"
+cat >"$NO_REALPATH_BIN/realpath" <<'EOF'
+#!/bin/sh
+exit 99
+EOF
+chmod +x "$NO_REALPATH_BIN/realpath"
+HOME="$NO_REALPATH_HOME" PATH="$NO_REALPATH_BIN:$PATH" "$INSTALLER" --prefix "$NO_REALPATH_PREFIX"
+[ -x "$NO_REALPATH_PREFIX/bin/tfs-ripast" ] || fail "realpath-free install did not publish tfs-ripast"
+
 # Generated launchers must shell-quote installer-controlled path defaults. This
 # prefix contains quotes, command substitutions, backticks, and a newline; none
 # may become active shell syntax when the launcher is parsed later.

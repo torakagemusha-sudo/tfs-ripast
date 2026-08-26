@@ -25,6 +25,7 @@ version-control checkpoint before applying repository-scale changes.
 
 ## Requirements
 
+- Linux, macOS, or WSL (native Windows is unsupported)
 - Node.js 24 or newer
 - `rg` (ripgrep) on `PATH`
 - `ast-grep` on `PATH` for structural operations

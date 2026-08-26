@@ -94,11 +94,31 @@ write_venv_receipt() {
   mv -f "$tmp" "$receipt"
 }
 
+stat_mode() {
+  local path="$1"
+  stat -c '%A' "$path" 2>/dev/null \
+    || stat -f '%Sp' "$path" 2>/dev/null
+}
+
+stat_identity() {
+  local path="$1"
+  stat -c '%d:%i' "$path" 2>/dev/null \
+    || stat -f '%d:%i' "$path" 2>/dev/null
+}
+
+canonical_path() {
+  local path="$1"
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$path" 2>/dev/null && return 0
+  fi
+  python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$path"
+}
+
 directory_is_not_shared_writable() {
   local path="$1"
   local mode
   [[ -d "$path" && ! -L "$path" ]] || return 1
-  mode="$(stat -c '%A' "$path" 2>/dev/null)" || return 1
+  mode="$(stat_mode "$path")" || return 1
   [[ "${mode:5:1}" != "w" && "${mode:8:1}" != "w" ]]
 }
 
@@ -106,7 +126,7 @@ file_is_not_shared_writable() {
   local path="$1"
   local mode
   [[ -f "$path" && ! -L "$path" ]] || return 1
-  mode="$(stat -c '%A' "$path" 2>/dev/null)" || return 1
+  mode="$(stat_mode "$path")" || return 1
   [[ "${mode:5:1}" != "w" && "${mode:8:1}" != "w" ]]
 }
 
@@ -126,13 +146,13 @@ rpst_is_ours() {
 
   if [[ -e "$tfs" ]]; then
     local rpst_id tfs_id rpst_real tfs_real
-    rpst_id="$(stat -c '%d:%i' "$rpst" 2>/dev/null || true)"
-    tfs_id="$(stat -c '%d:%i' "$tfs" 2>/dev/null || true)"
+    rpst_id="$(stat_identity "$rpst" 2>/dev/null || true)"
+    tfs_id="$(stat_identity "$tfs" 2>/dev/null || true)"
     if [[ -n "$rpst_id" && "$rpst_id" == "$tfs_id" ]]; then
       return 0
     fi
-    rpst_real="$(realpath "$rpst" 2>/dev/null || true)"
-    tfs_real="$(realpath "$tfs" 2>/dev/null || true)"
+    rpst_real="$(canonical_path "$rpst" 2>/dev/null || true)"
+    tfs_real="$(canonical_path "$tfs" 2>/dev/null || true)"
     if [[ -n "$rpst_real" && -n "$tfs_real" && "$rpst_real" == "$tfs_real" ]]; then
       return 0
     fi
@@ -156,7 +176,7 @@ preflight_providers() {
   command -v ast-grep >/dev/null 2>&1 || die "ast-grep not found on PATH"
   local ast_path ast_real ast_ver
   ast_path="$(command -v ast-grep)"
-  ast_real="$(realpath "$ast_path")"
+  ast_real="$(canonical_path "$ast_path")"
   if [[ "$ast_path" == /usr/bin/sg || "$ast_real" == /usr/bin/sg ]]; then
     die "ast-grep resolved to /usr/bin/sg (unrelated Unix sg); install ast-grep 0.45.1"
   fi
@@ -310,6 +330,7 @@ fi
 EOF
 }
 
+command -v python3 >/dev/null 2>&1 || die "python3 not found"
 preflight_providers
 directory_is_not_shared_writable "$PREFIX" \
   || die "refusing shared-writable or symlinked prefix $PREFIX"
@@ -334,7 +355,6 @@ if [[ -n "$ENV_FILE" ]]; then
 fi
 managed_venv_is_ours || die "refusing to use unrelated or symlinked $VENV"
 
-command -v python3 >/dev/null 2>&1 || die "python3 not found"
 (
   cd "$ROOT"
   npm run build

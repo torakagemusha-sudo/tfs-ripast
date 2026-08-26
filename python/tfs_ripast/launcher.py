@@ -12,49 +12,32 @@ from collections.abc import Mapping, Sequence
 
 EXECUTABLE_OVERRIDE = "TFS_RIPAST_EXECUTABLE"
 _WINDOWS = os.name == "nt"
-_WINDOWS_DEFAULT_PATHEXT = ".COM;.EXE"
-_WINDOWS_NATIVE_SUFFIXES = frozenset({".com", ".exe"})
-_WINDOWS_BATCH_SUFFIXES = frozenset({".bat", ".cmd"})
 
 
 class ExecutableNotFoundError(FileNotFoundError):
     """Raised when no trusted TypeScript CLI executable can be resolved."""
 
 
+def assert_supported_platform() -> None:
+    """Refuse hosts that cannot preserve the CLI's process-containment contract."""
+
+    if _WINDOWS:
+        raise ExecutableNotFoundError(
+            "native Windows is unsupported; use WSL or another supported POSIX host"
+        )
+
+
 def _checked_executable(candidate: str, source: str) -> str:
     path = Path(candidate).expanduser()
     if not path.is_file() or not os.access(path, os.X_OK):
         raise ExecutableNotFoundError(f"{source} is not an executable file: {candidate}")
-    resolved = path.resolve(strict=True)
-    if _WINDOWS and resolved.suffix.casefold() in _WINDOWS_BATCH_SUFFIXES:
-        raise ExecutableNotFoundError(
-            f"{source} is a Windows batch file and cannot be launched safely: "
-            f"{candidate}"
-        )
-    return str(resolved)
-
-
-def _windows_which(name: str, environment: Mapping[str, str]) -> str | None:
-    path_value = environment.get("PATH", "")
-    if not path_value:
-        return None
-
-    suffixes = [
-        suffix
-        for suffix in environment.get("PATHEXT", _WINDOWS_DEFAULT_PATHEXT).split(";")
-        if suffix.casefold() in _WINDOWS_NATIVE_SUFFIXES
-    ]
-    for directory in path_value.split(";"):
-        for suffix in suffixes:
-            candidate = Path(directory or os.curdir) / f"{name}{suffix}"
-            if candidate.is_file() and os.access(candidate, os.X_OK):
-                return str(candidate)
-    return None
+    return str(path.resolve(strict=True))
 
 
 def resolve_executable(environment: Mapping[str, str] | None = None) -> str:
     """Resolve override, adjacent packaged binary, then PATH, in that order."""
 
+    assert_supported_platform()
     env = os.environ if environment is None else environment
     override = env.get(EXECUTABLE_OVERRIDE)
     if override is not None:
@@ -64,11 +47,7 @@ def resolve_executable(environment: Mapping[str, str] | None = None) -> str:
     if adjacent.is_file() and os.access(adjacent, os.X_OK):
         return _checked_executable(str(adjacent), "adjacent packaged executable")
 
-    discovered = (
-        _windows_which("tfs-ripast", env)
-        if _WINDOWS
-        else shutil.which("tfs-ripast", path=env.get("PATH", ""))
-    )
+    discovered = shutil.which("tfs-ripast", path=env.get("PATH", ""))
     if discovered is None:
         raise ExecutableNotFoundError(
             f"tfs-ripast was not found; set {EXECUTABLE_OVERRIDE} to the TypeScript executable"

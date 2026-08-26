@@ -17,7 +17,7 @@ from .compiler import (
     PlanCompilationError,
     compile_plan,
 )
-from .launcher import ExecutableNotFoundError, launch
+from .launcher import ExecutableNotFoundError, assert_supported_platform, launch
 from .schema import RewritePlanValidationError
 
 
@@ -67,6 +67,7 @@ def _compiled_invocation(argv: list[str]) -> tuple[list[str], str | None]:
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     try:
+        assert_supported_platform()
         forwarded, stdin_data = _compiled_invocation(arguments)
         return launch(forwarded, stdin_data=stdin_data)
     except ExecutableNotFoundError as error:

@@ -1,5 +1,8 @@
 # Getting started
 
+Use Linux, macOS, or WSL. Native Windows is unsupported because Ripast cannot
+yet enforce its required descendant-process containment there.
+
 ## Install from source
 
 Run these commands from the repository root:

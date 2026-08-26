@@ -28,9 +28,8 @@ def make_fake_executable(
 
 
 def simulate_windows_executable_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Production resolution keys off launcher._WINDOWS, not shutil.which / _winapi.
-    # shutil._winapi exists on some POSIX CPython builds and is absent on others
-    # (notably CPython 3.11 on GitHub-hosted Ubuntu), so do not mock it.
+    # Platform support keys off launcher._WINDOWS rather than CPython internals,
+    # keeping this unsupported-host simulation portable across Python versions.
     monkeypatch.setattr(launcher, "_WINDOWS", True, raising=False)
 
 
@@ -114,76 +113,45 @@ def test_explicit_environment_without_path_does_not_use_ambient_path(
         resolve_executable({})
 
 
-def test_windows_path_only_uses_current_directory_when_explicit(
+def test_native_windows_is_rejected_before_executable_resolution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    package = tmp_path / "package"
-    current = tmp_path / "current"
-    searched = tmp_path / "searched"
-    current.mkdir()
-    searched.mkdir()
-    executable = make_fake_executable(current, "", "tfs-ripast.EXE")
-    monkeypatch.setattr(launcher, "__file__", str(package / "launcher.py"))
-    monkeypatch.chdir(current)
-    monkeypatch.setenv("PATHEXT", ".EXE")
+    executable = make_fake_executable(tmp_path, "", "tfs-ripast.EXE")
     simulate_windows_executable_lookup(monkeypatch)
 
-    with pytest.raises(ExecutableNotFoundError, match="was not found"):
-        resolve_executable({"PATH": str(searched), "PATHEXT": ".EXE"})
+    with pytest.raises(
+        ExecutableNotFoundError,
+        match=r"native Windows.*unsupported.*WSL",
+    ):
+        resolve_executable(
+            {
+                "TFS_RIPAST_EXECUTABLE": str(executable),
+                "PATH": str(tmp_path),
+                "PATHEXT": ".EXE",
+            }
+        )
 
-    assert resolve_executable({"PATH": ".", "PATHEXT": ".EXE"}) == str(
-        executable.resolve()
+
+def test_console_rejects_native_windows_before_reading_template_inputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    simulate_windows_executable_lookup(monkeypatch)
+
+    def unexpected_read(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("template input was read on an unsupported host")
+
+    monkeypatch.setattr(cli_main, "_read_bounded_utf8", unexpected_read)
+
+    status = cli_main.main(
+        ["plan", str(tmp_path / "missing.j2"), "--data", str(tmp_path / "missing.json")]
     )
-    assert resolve_executable(
-        {"PATH": f";{searched}", "PATHEXT": ".EXE"}
-    ) == str(executable.resolve())
 
-
-def test_windows_path_uses_supplied_pathext_instead_of_ambient(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    package = tmp_path / "package"
-    searched = tmp_path / "searched"
-    searched.mkdir()
-    make_fake_executable(searched, "", "tfs-ripast.WRAPPER")
-    native = make_fake_executable(searched, "", "tfs-ripast.EXE")
-    monkeypatch.setattr(launcher, "__file__", str(package / "launcher.py"))
-    monkeypatch.setenv("PATHEXT", ".WRAPPER")
-    simulate_windows_executable_lookup(monkeypatch)
-
-    assert resolve_executable(
-        {"PATH": str(searched), "PATHEXT": ".EXE"}
-    ) == str(native.resolve())
-
-
-@pytest.mark.parametrize("suffix", [".bat", ".CMD"])
-def test_windows_resolution_rejects_batch_file_override(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: str
-) -> None:
-    executable = make_fake_executable(tmp_path, "", f"tfs-ripast{suffix}")
-    simulate_windows_executable_lookup(monkeypatch)
-
-    with pytest.raises(ExecutableNotFoundError, match="batch"):
-        resolve_executable({"TFS_RIPAST_EXECUTABLE": str(executable)})
-
-
-def test_windows_resolution_rejects_adjacent_symlink_to_batch_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    package = tmp_path / "package"
-    binary_directory = package / "bin"
-    binary_directory.mkdir(parents=True)
-    batch = make_fake_executable(binary_directory, "", "tfs-ripast.CMD")
-    adjacent = binary_directory / "tfs-ripast"
-    try:
-        adjacent.symlink_to(batch.name)
-    except OSError as error:
-        pytest.skip(f"symlink creation is unavailable: {error}")
-    monkeypatch.setattr(launcher, "__file__", str(package / "launcher.py"))
-    simulate_windows_executable_lookup(monkeypatch)
-
-    with pytest.raises(ExecutableNotFoundError, match="batch"):
-        resolve_executable({"PATH": "", "PATHEXT": ".EXE"})
+    captured = capsys.readouterr()
+    assert status == 2
+    assert "native Windows" in captured.err
+    assert "WSL" in captured.err
 
 
 def test_console_entrypoint_preserves_child_signal_status(
