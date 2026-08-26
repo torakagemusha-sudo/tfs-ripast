@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "ts-manifest-b",
+  "workload": "ts-manifest-type-rename",
+  "allowedPaths": ["src/types.ts"],
+  "acceptance": {
+    "files": [
+      {
+        "path": "src/types.ts",
+        "contains": ["interface BenchmarkRecord", "record: BenchmarkRecord", "\"ExperimentRecord\""],
+        "excludes": ["interface ExperimentRecord", "record: ExperimentRecord"]
+      }
+    ]
+  }
+}
