@@ -28,13 +28,9 @@ def make_fake_executable(
 
 
 def simulate_windows_executable_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
-    class WindowsApi:
-        @staticmethod
-        def NeedCurrentDirectoryForExePath(_command: str) -> bool:
-            return True
-
-    monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr(shutil, "_winapi", WindowsApi())
+    # Production resolution keys off launcher._WINDOWS, not shutil.which / _winapi.
+    # shutil._winapi exists on some POSIX CPython builds and is absent on others
+    # (notably CPython 3.11 on GitHub-hosted Ubuntu), so do not mock it.
     monkeypatch.setattr(launcher, "_WINDOWS", True, raising=False)
 
 
