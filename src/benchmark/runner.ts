@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { chmod, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { delimiter, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { delimiter, isAbsolute, join, relative, sep } from "node:path";
 import { checkFixture, prepareFixture } from "./fixture.js";
 import { runMeasuredProcess } from "./process.js";
 import { buildCrossoverSchedule } from "./schedule.js";
@@ -68,9 +68,12 @@ export async function runExperiment(manifest: ExperimentManifest, options: Exper
     if (!contained(fixtureRoot, fixtureSource)) throw new Error(`fixture identifier escapes fixture root: ${spec.fixture}`);
     const baseline = await prepareFixture(fixtureSource, trialDirectory);
     const [command, ...args] = options.agentCommand;
+    const hostPath = process.env.PATH ?? "";
     const env: Record<string, string> = {
       ...options.extraEnv,
-      PATH: spec.mode === "normal" ? `${deniedBin}${delimiter}${dirname(command)}` : dirname(command),
+      PATH: spec.mode === "normal"
+        ? (hostPath.length > 0 ? `${deniedBin}${delimiter}${hostPath}` : deniedBin)
+        : hostPath,
       TFS_RIPAST_MODE: spec.mode,
       TFS_BENCH_PROMPT: join(trialDirectory, "prompt.md"),
     };

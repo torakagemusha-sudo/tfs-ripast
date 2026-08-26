@@ -65,11 +65,11 @@ describe("language detection", () => {
   });
 
   it("uses the same Node 24 glob dialect as operation include globs", () => {
-    expect(detectLanguage("src/component.tsx", {
+    expect(detectLanguage("src/component.tsx", [{
       glob: "**/*.{ts,tsx}",
       language: "tsx",
     }])).toEqual({ language: "tsx", source: "override" });
-    expect(detectLanguage("src/app.js", {
+    expect(detectLanguage("src/app.js", [{
       glob: "*.[jt]s",
       language: "javascript",
     }])).toEqual({ language: "javascript", source: "override" });

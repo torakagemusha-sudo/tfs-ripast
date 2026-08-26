@@ -35,7 +35,11 @@ export async function runBenchmarkCli(argv: readonly string[]): Promise<Benchmar
       manifest = {
         schemaVersion: 1, seed: "self-test-v1", repetitions: 1, model: "checked-in-fake-agent",
         fixtureRoot: join(repoRoot, "benchmarks", "fixtures"),
-        pairs: [{ workload: "textual-configuration-migration", a: "textual-a", b: "textual-b" }], timeoutMs: 5_000,
+        pairs: [
+          { workload: "textual-configuration-migration", a: "textual-a", b: "textual-b" },
+          { workload: "kamailio-fuzz-uri-rename", a: "kamailio-fuzz-a", b: "kamailio-fuzz-b" },
+          { workload: "ts-manifest-type-rename", a: "ts-manifest-a", b: "ts-manifest-b" },
+        ], timeoutMs: 5_000,
       };
       agentCommand = [process.execPath, join(repoRoot, "benchmarks", "helpers", "fake-agent.mjs")];
       ripastArtifact = join(repoRoot, "src", "cli.ts");
