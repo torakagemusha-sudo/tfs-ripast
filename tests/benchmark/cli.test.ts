@@ -14,7 +14,7 @@ it("self-test writes versioned auditable JSON and Markdown", async () => {
   expect(result.exitCode).toBe(0);
   const json = JSON.parse(await readFile(join(output, "results.json"), "utf8")) as { schemaVersion: number; trials: unknown[] };
   expect(json.schemaVersion).toBe(1);
-  expect(json.trials).toHaveLength(4);
+  expect(json.trials).toHaveLength(12);
   expect(await readFile(join(output, "report.md"), "utf8")).toContain("# TFS Ripast Benchmark");
 });
 

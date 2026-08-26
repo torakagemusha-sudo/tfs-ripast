@@ -8,13 +8,12 @@ Run these commands from the repository root:
 git clone https://github.com/torakagemusha-sudo/tfs-ripast.git
 cd tfs-ripast
 npm ci
-npm run build
-npm link
+scripts/install-local.sh --prefix "$HOME/.local"
 rpst --version
 ```
 
-`npm link` installs both `rpst` and `tfs-ripast` aliases. Use `rpst` in normal
-workflows.
+The installer writes both `rpst` and `tfs-ripast` under `$HOME/.local/bin`. Use
+`rpst` in normal workflows. Ensure that directory is on `PATH`.
 
 ## Preview a rewrite
 
