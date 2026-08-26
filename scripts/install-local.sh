@@ -132,7 +132,7 @@ resolve_node() {
     return 0
   fi
   local candidate
-  for candidate in "\$HOME/.nvm/versions.node"/v25*/bin/node "\$HOME/.nvm/versions/node"/*/bin/node; do
+  for candidate in "\$HOME/.nvm/versions/node"/v25*/bin/node "\$HOME/.nvm/versions/node"/*/bin/node; do
     if [[ -x "\$candidate" ]]; then
       printf '%s\\n' "\$candidate"
       return 0
