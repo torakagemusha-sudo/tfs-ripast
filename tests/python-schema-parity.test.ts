@@ -1,14 +1,30 @@
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { accessSync, constants as fsConstants } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseRewritePlan } from "../src/schema.js";
+
+function pythonExecutable(): string {
+  const override = process.env.TFS_RIPAST_PYTHON;
+  if (override !== undefined && override !== "") {
+    return override;
+  }
+  const venvPython = join(homedir(), ".local/share/tfs-ripast-python/bin/python");
+  try {
+    accessSync(venvPython, fsConstants.X_OK);
+    return venvPython;
+  } catch {
+    return "python3";
+  }
+}
 
 function basePlan(): Record<string, unknown> {
   return { version: 1, name: "parity", root: ".", operations: [], policy: {}, validations: [] };
 }
 
 function pythonAccepts(value: unknown): boolean {
-  const result = spawnSync("python3", ["-c", [
+  const result = spawnSync(pythonExecutable(), ["-c", [
     "import json, sys",
     "from tfs_ripast.schema import validate_rewrite_plan",
     "try:",

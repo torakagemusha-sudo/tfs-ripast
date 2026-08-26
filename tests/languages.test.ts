@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { detectLanguage } from "../src/languages.js";
+import { detectLanguage, napiLanguageId } from "../src/languages.js";
 
 describe("language detection", () => {
+  it("maps CLI language ids to @ast-grep/napi Lang string enums", () => {
+    expect(napiLanguageId("typescript")).toBe("TypeScript");
+    expect(napiLanguageId("javascript")).toBe("JavaScript");
+    expect(napiLanguageId("jsx")).toBe("JavaScript");
+    expect(napiLanguageId("tsx")).toBe("Tsx");
+    expect(napiLanguageId("html")).toBe("Html");
+    expect(napiLanguageId("css")).toBe("Css");
+    expect(napiLanguageId("python")).toBe("python");
+  });
+
   it("maps unambiguous ast-grep extensions", () => {
     expect(detectLanguage("src/app.ts", [])).toEqual({
       language: "typescript",
@@ -55,11 +65,11 @@ describe("language detection", () => {
   });
 
   it("uses the same Node 24 glob dialect as operation include globs", () => {
-    expect(detectLanguage("src/component.tsx", [{
+    expect(detectLanguage("src/component.tsx", {
       glob: "**/*.{ts,tsx}",
       language: "tsx",
     }])).toEqual({ language: "tsx", source: "override" });
-    expect(detectLanguage("src/app.js", [{
+    expect(detectLanguage("src/app.js", {
       glob: "*.[jt]s",
       language: "javascript",
     }])).toEqual({ language: "javascript", source: "override" });

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 from collections.abc import Mapping, Sequence
@@ -23,26 +24,7 @@ def _checked_executable(candidate: str, source: str) -> str:
     return str(path.resolve(strict=True))
 
 
-def _path_candidates(name: str, environment: Mapping[str, str]) -> Sequence[Path]:
-    suffixes = [""]
-    if os.name == "nt":
-        suffixes.extend(
-            suffix.lower()
-            for suffix in environment.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(os.pathsep)
-            if suffix
-        )
-    return [
-        Path(directory or os.curdir) / f"{name}{suffix}"
-        for directory in environment.get("PATH", "").split(os.pathsep)
-        for suffix in suffixes
-    ]
-
-
-def resolve_executable(
-    environment: Mapping[str, str] | None = None,
-    *,
-    excluded_executable: str | None = None,
-) -> str:
+def resolve_executable(environment: Mapping[str, str] | None = None) -> str:
     """Resolve override, adjacent packaged binary, then PATH, in that order."""
 
     env = os.environ if environment is None else environment
@@ -54,20 +36,12 @@ def resolve_executable(
     if adjacent.is_file() and os.access(adjacent, os.X_OK):
         return str(adjacent.resolve(strict=True))
 
-    excluded = (
-        Path(excluded_executable).expanduser().resolve(strict=False)
-        if excluded_executable is not None
-        else None
-    )
-    for candidate in _path_candidates("tfs-ripast", env):
-        if not candidate.is_file() or not os.access(candidate, os.X_OK):
-            continue
-        resolved = candidate.resolve(strict=True)
-        if excluded is None or resolved != excluded:
-            return str(resolved)
-    raise ExecutableNotFoundError(
-        f"tfs-ripast was not found; set {EXECUTABLE_OVERRIDE} to the TypeScript executable"
-    )
+    discovered = shutil.which("tfs-ripast", path=env.get("PATH"))
+    if discovered is None:
+        raise ExecutableNotFoundError(
+            f"tfs-ripast was not found; set {EXECUTABLE_OVERRIDE} to the TypeScript executable"
+        )
+    return _checked_executable(discovered, "PATH entry")
 
 
 def launch(
@@ -75,7 +49,6 @@ def launch(
     *,
     stdin_data: str | None = None,
     environment: Mapping[str, str] | None = None,
-    launcher_executable: str | None = None,
 ) -> int:
     """Run the TypeScript CLI without a shell and preserve its process result."""
 
@@ -102,13 +75,7 @@ def launch(
         for signum in forwarded:
             previous[signum] = signal.getsignal(signum)
             signal.signal(signum, forward)
-        executable = (
-            resolve_executable(env)
-            if launcher_executable is None
-            else resolve_executable(
-                env, excluded_executable=launcher_executable
-            )
-        )
+        executable = resolve_executable(env)
         try:
             child = subprocess.Popen(
                 [executable, *arguments],
