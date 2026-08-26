@@ -21,9 +21,15 @@ All commands are available through `rpst` and `tfs-ripast`.
 | `--json` | Emit one machine-readable JSON document |
 | `--dry-run` | Never write source files |
 | `--write` | Apply after validation without an interactive prompt |
+| `-- PATH ...` | End option parsing and supply one or more ad-hoc paths |
 
 `--dry-run` and `--write` are mutually exclusive. Dry-run behavior is the
-default for non-interactive execution.
+default for non-interactive execution. Ad-hoc path operands must follow the
+literal `--` separator. Ad-hoc write, plan-output, and validation options also
+must precede `--search`/`--replace` and require that separator, including a
+trailing `--` when the default `.` path is intended. Programs that forward path
+input must add the separator themselves; a separator received as path input is
+not an authority boundary.
 
 ## `plan`
 

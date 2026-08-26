@@ -23,7 +23,7 @@ describe("CLI", () => {
       confirm: async () => false,
     });
     expect(code).toBe(0);
-    expect(chunks.join("")).toContain("tfs-ripast --search TEXT --replace TEXT [PATH ...]");
+    expect(chunks.join("")).toContain("tfs-ripast --search TEXT --replace TEXT [-- PATH ...]");
   });
 
   it("reports 0.1.1", async () => {

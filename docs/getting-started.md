@@ -18,14 +18,14 @@ The installer writes both `rpst` and `tfs-ripast` under `$HOME/.local/bin`. Use
 ## Preview a rewrite
 
 ```sh
-rpst --search oldName --replace newName src
+rpst --search oldName --replace newName -- src
 ```
 
 The default is a preview. Add `--json` for automation or `--changed-only` to
 limit discovery to changed and visible untracked files:
 
 ```sh
-rpst --search oldName --replace newName src --changed-only --json
+rpst --search oldName --replace newName --changed-only --json -- src
 ```
 
 ## Save, inspect, and apply a plan

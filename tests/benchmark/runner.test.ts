@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { runExperiment } from "../../src/benchmark/runner.js";
 import { buildCrossoverSchedule } from "../../src/benchmark/schedule.js";
@@ -182,5 +183,34 @@ describe("runExperiment", () => {
       extraEnv: { TFS_BENCH_FAIL: "1" },
     });
     expect(record.trials.every((trial) => trial.status === "failed" && trial.correct === false)).toBe(true);
+  });
+
+  it("invalidates Ripast trials when the pinned artifact changes", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "ripast-runner-artifact-mutation-"));
+    roots.push(tempRoot);
+    const artifact = join(tempRoot, "ripast-artifact.js");
+    const agent = join(tempRoot, "mutating-agent.mjs");
+    const fakeAgent = pathToFileURL(join(process.cwd(), "benchmarks", "helpers", "fake-agent.mjs")).href;
+    await writeFile(artifact, "// pinned artifact\n", "utf8");
+    await writeFile(agent, [
+      "import { writeFile } from 'node:fs/promises';",
+      `await import(${JSON.stringify(fakeAgent)});`,
+      "if (process.env.TFS_RIPAST_MODE === 'ripast') await writeFile(process.env.TFS_RIPAST_BIN, '// replaced artifact\\n', 'utf8');",
+    ].join("\n"), "utf8");
+
+    const record = await runExperiment({
+      schemaVersion: 1, seed: "artifact-mutation", repetitions: 1, model: "local-mutating-agent",
+      fixtureRoot: join(process.cwd(), "benchmarks", "fixtures"),
+      pairs: [{ workload: "textual", a: "textual-a", b: "textual-b" }], timeoutMs: 5_000,
+    }, {
+      agentCommand: [process.execPath, agent],
+      ripastArtifact: artifact,
+      tempRoot,
+    });
+
+    expect(record.trials.filter((trial) => trial.mode === "normal").every((trial) => trial.status === "success")).toBe(true);
+    expect(record.trials.filter((trial) => trial.mode === "ripast").every((trial) =>
+      trial.status === "failed" && trial.violations.includes("Ripast artifact changed during trial"),
+    )).toBe(true);
   });
 });

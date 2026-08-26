@@ -17,6 +17,14 @@ async function sha256(path: string): Promise<string> {
   return createHash("sha256").update(await readFile(path)).digest("hex");
 }
 
+async function hasSha256(path: string, expected: string): Promise<boolean> {
+  try {
+    return await sha256(path) === expected;
+  } catch {
+    return false;
+  }
+}
+
 async function createDeniedAliasBin(root: string): Promise<string> {
   const bin = join(root, "normal-mode-bin");
   await mkdir(bin, { recursive: true });
@@ -59,8 +67,9 @@ export async function runExperiment(manifest: ExperimentManifest, options: Exper
   validateManifest(manifest);
   await mkdir(options.tempRoot, { recursive: true });
   const fixtureRoot = await realpath(manifest.fixtureRoot);
+  const ripastArtifact = await realpath(options.ripastArtifact);
   const deniedBin = await createDeniedAliasBin(options.tempRoot);
-  const artifactHash = await sha256(options.ripastArtifact);
+  const artifactHash = await sha256(ripastArtifact);
   const trials: TrialRecord[] = [];
   for (const spec of buildCrossoverSchedule(manifest.seed, manifest.pairs, manifest.repetitions)) {
     const trialDirectory = join(options.tempRoot, `trial-${String(spec.order).padStart(3, "0")}`);
@@ -77,7 +86,7 @@ export async function runExperiment(manifest: ExperimentManifest, options: Exper
       TFS_RIPAST_MODE: spec.mode,
       TFS_BENCH_PROMPT: join(trialDirectory, "prompt.md"),
     };
-    if (spec.mode === "ripast") env.TFS_RIPAST_BIN = options.ripastArtifact;
+    if (spec.mode === "ripast") env.TFS_RIPAST_BIN = ripastArtifact;
     else delete env.TFS_RIPAST_BIN;
     const processResult = await runMeasuredProcess({
       command,
@@ -88,7 +97,11 @@ export async function runExperiment(manifest: ExperimentManifest, options: Exper
       env,
     });
     const correctness = await checkFixture({ trialDir: trialDirectory, baseline });
-    const correct = processResult.exitCode === 0 && correctness.success;
+    const artifactUnchanged = spec.mode !== "ripast" || await hasSha256(ripastArtifact, artifactHash);
+    const violations = artifactUnchanged
+      ? correctness.violations
+      : [...correctness.violations, "Ripast artifact changed during trial"];
+    const correct = processResult.exitCode === 0 && correctness.success && artifactUnchanged;
     trials.push({
       ...spec,
       status: processResult.timedOut ? "timed-out" : correct ? "success" : "failed",
@@ -98,7 +111,7 @@ export async function runExperiment(manifest: ExperimentManifest, options: Exper
       commandEvents: processResult.commandEvents,
       processExitCode: processResult.exitCode,
       acceptanceExitCode: correctness.acceptanceExitCode,
-      violations: correctness.violations,
+      violations,
       baselineTreeHash: baseline.treeHash,
       resultTreeHash: correctness.resultTreeHash,
       ripastArtifactHash: spec.mode === "ripast" ? artifactHash : null,

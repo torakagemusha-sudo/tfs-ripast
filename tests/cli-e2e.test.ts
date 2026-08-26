@@ -129,7 +129,7 @@ describe("compiled CLI end to end", () => {
   it("keeps package-generated npm bin aliases byte-identical", async () => {
     const root = await temporaryDirectory("tfs-ripast-e2e-");
     await writeFile(join(root, "input.txt"), "old\n", "utf8");
-    const argv = ["--search", "old", "--replace", "new", "--json", "input.txt"];
+    const argv = ["--search", "old", "--replace", "new", "--json", "--", "input.txt"];
 
     const canonical = spawnSync(process.execPath, [aliases.tfsRipast, ...argv], { cwd: root, encoding: "utf8" });
     const short = spawnSync(process.execPath, [aliases.rpst, ...argv], { cwd: root, encoding: "utf8" });
@@ -145,13 +145,13 @@ describe("compiled CLI end to end", () => {
   it("never mutates on non-TTY default execution and mutates only with --write", async () => {
     const root = await temporaryDirectory("tfs-ripast-e2e-write-");
     await writeFile(join(root, "input.txt"), "old\n", "utf8");
-    const common = ["--search", "old", "--replace", "new", "--json", "input.txt"];
+    const common = ["--search", "old", "--replace", "new", "--json", "--", "input.txt"];
 
     const preview = runCli(root, common);
     expect(preview.status).toBe(0);
     expect(await readFile(join(root, "input.txt"), "utf8")).toBe("old\n");
 
-    const write = runCli(root, [...common, "--write"]);
+    const write = runCli(root, ["--write", "--search", "old", "--replace", "new", "--json", "--", "input.txt"]);
     expect(write.status).toBe(0);
     expect(JSON.parse(write.stdout)).toMatchObject({ outcome: "written" });
     expect(await readFile(join(root, "input.txt"), "utf8")).toBe("new\n");
@@ -165,7 +165,7 @@ describe("compiled CLI end to end", () => {
     const root = await temporaryDirectory("tfs-ripast-e2e-pty-");
     await writeFile(join(root, "input.txt"), "old\n", "utf8");
 
-    const result = runCliInPty(root, ["--search", "old", "--replace", "new", "input.txt"], input);
+    const result = runCliInPty(root, ["--search", "old", "--replace", "new", "--", "input.txt"], input);
 
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
     expect(result.stdout).toContain("Apply all changes? [y/N]");
@@ -178,19 +178,21 @@ describe("compiled CLI end to end", () => {
     await writeFile(join(root, "regex.txt"), "old12 old34\n", "utf8");
 
     const structural = runCli(root, [
+      "--write",
       "--search", "old($ARG)",
       "--replace", "new(${ARG})",
       "--lang", "typescript",
-      "--write",
       "--json",
+      "--",
       "structural.ts",
     ]);
     const regex = runCli(root, [
+      "--write",
       "--search", "old[0-9]+",
       "--replace", "new",
       "--regex",
-      "--write",
       "--json",
+      "--",
       "regex.txt",
     ]);
 

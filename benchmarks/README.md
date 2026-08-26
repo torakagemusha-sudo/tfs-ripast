@@ -8,7 +8,7 @@ This harness compares end-to-end rewrite trials with and without Ripast. It runs
 npm run benchmark:self-test
 ```
 
-The self-test uses a checked-in deterministic fake agent and the paired fixtures under `benchmarks/fixtures/`. It makes no network requests and does not invoke a cloud model. Results are written beneath `benchmark-results/self-test/`. Each trial's process timeout is 5s.
+The self-test uses a checked-in deterministic fake agent and the synthetic paired fixtures under `benchmarks/fixtures/`. It makes no network requests and does not invoke a cloud model. Results are written beneath `benchmark-results/self-test/`. Each trial's process timeout is 5s. License-recorded source excerpts are intentionally excluded from the npm package; they remain available in a source checkout for explicitly configured experiments.
 
 ## Real agent runs
 
@@ -62,7 +62,7 @@ A trial succeeds only if the agent exits successfully, the declarative file asse
 
 Do not declare a winner unless all four crossover cells of a workload pair succeed. A single failed, timed-out, or incorrect cell voids comparative claims for that pair. The Markdown report follows the same rule: it prints mode totals but does not name a winner unless every compared trial is `success`.
 
-The checked-in fake-agent run is a harness correctness gate, not evidence that Ripast improves a real agent. Do not publish a comparative claim until at least one synthetic and one license-recorded, revision-pinned real workload complete all four crossover cells with identical model configuration and clean correctness gates.
+The checked-in fake-agent run is a harness correctness gate, not evidence that Ripast improves a real agent. Do not publish a comparative claim until at least one synthetic and one license-recorded, revision-pinned real workload complete all four crossover cells with identical model configuration and clean correctness gates. The harness records the configured artifact and rejects mutation, but it cannot prove that an arbitrary agent invoked that artifact; publishable claims require a trusted, version-pinned adapter with independently auditable invocation telemetry.
 
 ## Cloud coding agents
 

@@ -8,7 +8,7 @@
       {
         "path": "src/types.ts",
         "contains": ["interface BenchmarkRecord", "record: BenchmarkRecord", "\"ExperimentRecord\""],
-        "excludes": ["interface ExperimentRecord", "record: ExperimentRecord"]
+        "excludes": ["interface ExperimentRecord", "record: ExperimentRecord", "): ExperimentRecord"]
       }
     ]
   }

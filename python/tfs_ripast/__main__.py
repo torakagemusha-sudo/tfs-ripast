@@ -86,5 +86,11 @@ def _exit_with_child_status(status: int) -> None:
     raise SystemExit(128 + signum)
 
 
-if __name__ == "__main__":
+def entrypoint() -> None:
+    """Exit the console script with the TypeScript child's exact status."""
+
     _exit_with_child_status(main())
+
+
+if __name__ == "__main__":
+    entrypoint()

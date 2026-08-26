@@ -2,13 +2,10 @@ import { access, readFile, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
-const isInternalSpec = (file) => file === "docs/superpowers" || file.startsWith("docs/superpowers/");
 const tracked = execFileSync("git", ["ls-files", "*.md"], { encoding: "utf8" })
-  .trim().split("\n").filter((file) => file.length > 0 && !isInternalSpec(file));
+  .trim().split("\n").filter((file) => file.length > 0);
 const docs = (await readdir("docs", { recursive: true }))
-  .filter((file) => file.endsWith(".md"))
-  .map((file) => `docs/${file}`)
-  .filter((file) => !isInternalSpec(file));
+  .filter((file) => file.endsWith(".md")).map((file) => `docs/${file}`);
 const files = [...new Set([...tracked, ...docs])];
 const machinePath = /(?:\/home\/k1|\/Users\/|[A-Za-z]:\\)/u;
 const missing = [];

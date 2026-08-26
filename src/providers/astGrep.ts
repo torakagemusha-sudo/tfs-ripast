@@ -40,6 +40,7 @@ interface AstGrepMatch {
 
 const defaultTimeoutMs = 30_000;
 const defaultMaxOutputBytes = 8 * 1024 * 1024;
+const exactAstGrepVersion = /^ast-grep\s+0\.45\.1$/u;
 
 interface FailureContext {
   operationId: string;
@@ -582,6 +583,13 @@ export class AstGrepProvider implements MatchProvider {
     if (version === "") {
       throw new ProviderExecutionError("ast-grep --version returned no version.", {
         code: "ast-grep-version-empty",
+        operationId,
+        paths,
+      });
+    }
+    if (!exactAstGrepVersion.test(version)) {
+      throw new ProviderExecutionError(`ast-grep must be exactly version 0.45.1 (got: ${version}).`, {
+        code: "ast-grep-version-unsupported",
         operationId,
         paths,
       });

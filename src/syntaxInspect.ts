@@ -9,21 +9,17 @@ export interface SyntaxInspection {
   hasMissingDescendant: boolean;
   /** Count of tree-sitter `ERROR` nodes only. */
   errorNodeCount: number;
-  /**
-   * Isolated JS/TS extra check; never folded into hasError / errorNodeCount.
-   * tree-sitter-typescript 0.45.1 lexes reserved words such as `new` as
-   * `identifier` (no ERROR node); tsc reports TS1389. Brief still requires
-   * `const new =` to block writes.
-   */
-  hasReservedBinding: boolean;
+  /** True iff TypeScript's JS-family parser reported a syntax diagnostic. */
+  hasJsFamilyDiagnostic: boolean;
+  /** Count of error diagnostics from TypeScript's JS-family parser. */
+  jsFamilyDiagnosticCount: number;
 }
 
 interface SyntaxNode {
   kind(): string;
   text(): string;
   range(): { start: { index: number }; end: { index: number } };
-  children(): SyntaxNode[];
-  field?: (name: string) => SyntaxNode | null;
+  child(index: number): SyntaxNode | null;
   isMissing?: () => boolean;
 }
 
@@ -65,18 +61,18 @@ const dynamicLanguagePackages: Readonly<Record<string, string>> = {
 };
 
 const jsFamilyLanguages = new Set<AstGrepLanguage>(["javascript", "jsx", "typescript", "tsx"]);
-
-/** JS/TS reserved binding names (hasReservedBinding only; tree-sitter still parses them). */
-const jsReservedBindings = new Set([
-  "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default",
-  "delete", "do", "else", "enum", "export", "extends", "false", "finally", "for", "function",
-  "if", "implements", "import", "in", "instanceof", "interface", "let", "new", "null",
-  "package", "private", "protected", "public", "return", "static", "super", "switch",
-  "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
-]);
+const jsFamilyFileNames: Readonly<Partial<Record<AstGrepLanguage, string>>> = {
+  javascript: "prepared.js",
+  jsx: "prepared.jsx",
+  typescript: "prepared.ts",
+  tsx: "prepared.tsx",
+};
+const maximumPreparedSyntaxBytes = 16 * 1024 * 1024;
+const maximumPreparedSyntaxNodes = 500_000;
 
 let napiModule: AstGrepNapi | undefined;
 let dynamicLanguagesRegistered = false;
+let typescriptModule: typeof import("typescript") | undefined;
 
 function loadAstGrepNapi(): AstGrepNapi {
   if (napiModule !== undefined) {
@@ -103,35 +99,50 @@ function ensureDynamicLanguages(napi: AstGrepNapi): void {
   dynamicLanguagesRegistered = true;
 }
 
+function loadTypeScript(): typeof import("typescript") {
+  if (typescriptModule !== undefined) {
+    return typescriptModule;
+  }
+  try {
+    typescriptModule = require("typescript") as typeof import("typescript");
+    return typescriptModule;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`TypeScript could not be loaded for JavaScript-family syntax inspection: ${detail}`);
+  }
+}
+
 function nodeIsMissing(node: SyntaxNode): boolean {
   if (typeof node.isMissing === "function" && node.isMissing()) {
     return true;
   }
   const range = node.range();
-  return node.text() === "" && range.start.index === range.end.index;
-}
-
-function reservedBindingName(node: SyntaxNode): string | undefined {
-  if (node.kind() !== "variable_declarator") {
-    return undefined;
+  if (range.start.index !== range.end.index) {
+    return false;
   }
-  const name = typeof node.field === "function" ? node.field("name") : undefined;
-  if (name !== undefined && name !== null && name.kind() === "identifier") {
-    return name.text();
-  }
-  const first = node.children()[0];
-  return first?.kind() === "identifier" ? first.text() : undefined;
+  return node.text() === "";
 }
 
 function inspectTree(
-  language: AstGrepLanguage,
   root: SyntaxNode,
-): Pick<SyntaxInspection, "hasError" | "hasMissingDescendant" | "errorNodeCount" | "hasReservedBinding"> {
+): Pick<SyntaxInspection, "hasError" | "hasMissingDescendant" | "errorNodeCount"> {
   let hasError = false;
   let hasMissingDescendant = false;
-  let hasReservedBinding = false;
   let errorNodeCount = 0;
   const stack: Array<{ node: SyntaxNode; isRoot: boolean }> = [{ node: root, isRoot: true }];
+  let discoveredNodes = 1;
+  const pushNode = (candidate: SyntaxNode | null): void => {
+    if (candidate === null) {
+      return;
+    }
+    if (discoveredNodes >= maximumPreparedSyntaxNodes) {
+      throw new Error(
+        `Prepared syntax tree exceeds the ${maximumPreparedSyntaxNodes.toLocaleString("en-US")}-node limit.`,
+      );
+    }
+    discoveredNodes += 1;
+    stack.push({ node: candidate, isRoot: false });
+  };
   while (stack.length > 0) {
     const current = stack.pop();
     if (current === undefined) {
@@ -141,30 +152,59 @@ function inspectTree(
     if (node.kind() === "ERROR") {
       hasError = true;
       errorNodeCount += 1;
-    } else if (jsFamilyLanguages.has(language)) {
-      const binding = reservedBindingName(node);
-      if (binding !== undefined && jsReservedBindings.has(binding)) {
-        hasReservedBinding = true;
-      }
     }
     if (!isRoot && nodeIsMissing(node)) {
       hasMissingDescendant = true;
     }
-    const children = node.children();
-    for (let index = children.length - 1; index >= 0; index -= 1) {
-      const child = children[index];
-      if (child !== undefined) {
-        stack.push({ node: child, isRoot: false });
+    for (let childIndex = 0; ; childIndex += 1) {
+      const child = node.child(childIndex);
+      if (child === null) {
+        break;
       }
+      pushNode(child);
     }
   }
-  return { hasError, hasMissingDescendant, errorNodeCount, hasReservedBinding };
+  return { hasError, hasMissingDescendant, errorNodeCount };
+}
+
+function inspectJsFamily(
+  language: AstGrepLanguage,
+  source: string,
+): Pick<SyntaxInspection, "hasJsFamilyDiagnostic" | "jsFamilyDiagnosticCount"> {
+  if (!jsFamilyLanguages.has(language)) {
+    return { hasJsFamilyDiagnostic: false, jsFamilyDiagnosticCount: 0 };
+  }
+  const fileName = jsFamilyFileNames[language];
+  if (fileName === undefined) {
+    throw new Error(`No TypeScript parser filename is registered for JavaScript-family language ${language}.`);
+  }
+  const typescript = loadTypeScript();
+  const diagnostics = typescript.transpileModule(source, {
+    compilerOptions: {
+      target: typescript.ScriptTarget.Latest,
+      ...((language === "jsx" || language === "tsx") ? { jsx: typescript.JsxEmit.Preserve } : {}),
+    },
+    fileName,
+    reportDiagnostics: true,
+  }).diagnostics ?? [];
+  const jsFamilyDiagnosticCount = diagnostics.filter(
+    (diagnostic) => diagnostic.category === typescript.DiagnosticCategory.Error,
+  ).length;
+  return {
+    hasJsFamilyDiagnostic: jsFamilyDiagnosticCount > 0,
+    jsFamilyDiagnosticCount,
+  };
 }
 
 export function inspectPreparedSyntax(
   language: AstGrepLanguage,
   sourceUtf8: Uint8Array,
 ): SyntaxInspection {
+  if (sourceUtf8.byteLength > maximumPreparedSyntaxBytes) {
+    throw new Error(
+      `Prepared syntax exceeds the ${maximumPreparedSyntaxBytes.toLocaleString("en-US")}-byte limit.`,
+    );
+  }
   const napi = loadAstGrepNapi();
   if (Object.hasOwn(dynamicLanguagePackages, language)) {
     try {
@@ -181,5 +221,5 @@ export function inspectPreparedSyntax(
     throw new Error("Prepared syntax is not valid UTF-8.");
   }
   const root = napi.parse(napiLanguageId(language), source).root();
-  return { language, ...inspectTree(language, root) };
+  return { language, ...inspectTree(root), ...inspectJsFamily(language, source) };
 }

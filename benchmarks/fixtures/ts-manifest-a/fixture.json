@@ -8,7 +8,7 @@
       {
         "path": "src/types.ts",
         "contains": ["interface BenchmarkManifest", "manifest: BenchmarkManifest", "\"ExperimentManifest\""],
-        "excludes": ["interface ExperimentManifest", "manifest: ExperimentManifest"]
+        "excludes": ["interface ExperimentManifest", "manifest: ExperimentManifest", "): ExperimentManifest"]
       }
     ]
   }

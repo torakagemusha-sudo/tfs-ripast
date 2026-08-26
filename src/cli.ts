@@ -163,7 +163,7 @@ interface RewriteCommand extends CommonOptions {
   regex: boolean;
   languages: AstGrepLanguage[];
   globs: string[];
-  path: string;
+  paths: string[];
 }
 
 interface PlanCommand extends CommonOptions {
@@ -195,14 +195,14 @@ interface UndoCommand extends CommonOptions {
 
 type ParsedCommand = RewriteCommand | PlanCommand | InspectCommand | ApplyCommand | VerifyCommand | UndoCommand;
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 const HELP = `Usage: tfs-ripast [COMMAND] [OPTIONS]
 
 Safe repository-scale search, rewrite planning, validation, and rollback.
 
 Commands:
-  tfs-ripast --search TEXT --replace TEXT [PATH]  Plan an ad-hoc rewrite
+  tfs-ripast --search TEXT --replace TEXT [-- PATH ...]  Plan an ad-hoc rewrite
   tfs-ripast plan PLAN.json                       Resolve a rewrite plan
   tfs-ripast inspect EDIT-PLAN.json               Inspect a saved edit plan
   tfs-ripast apply EDIT-PLAN.json                 Revalidate and apply a saved plan
@@ -223,10 +223,13 @@ Core options:
   --json                     Emit one machine-readable JSON document
   --dry-run                  Never write source files
   --write                    Apply after validation without an interactive prompt
+  -- PATH ...                End options and supply ad-hoc rewrite paths
   -h, --help                 Show this help
   -V, --version              Show the version
 
-Dry-run is the default for non-interactive execution. Review previews before using --write.
+Dry-run is the default for non-interactive execution. For ad-hoc rewrites, place
+write, plan-output, and validation authority before --search/--replace, and put a
+caller-supplied -- before path operands.
 `;
 
 function commandName(argv: readonly string[]): ParsedCommand["kind"] {
@@ -356,6 +359,12 @@ function parseCommonOption(
   return undefined;
 }
 
+function isAdHocAuthorityOption(argument: string): boolean {
+  return argument === "--write" || argument === "--plan-out" ||
+    argument === "--check" || argument === "--validation-command" ||
+    argument === "--keep-on-check-failure";
+}
+
 function assertWriteMode(options: CommonOptions): void {
   if (options.dryRun && options.write) {
     throw new Error("--dry-run and --write are mutually exclusive.");
@@ -438,6 +447,7 @@ function parseArguments(argv: readonly string[], state: ArgumentParseState): Par
   const globs: string[] = [];
   const positional: string[] = [];
   let positionalOnly = false;
+  let rewriteDefinitionStarted = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === undefined) {
@@ -448,17 +458,24 @@ function parseArguments(argv: readonly string[], state: ArgumentParseState): Par
       continue;
     }
     if (!positionalOnly) {
+      if (rewriteDefinitionStarted && isAdHocAuthorityOption(argument)) {
+        throw new Error(
+          "Ad-hoc write, plan-output, and validation authority options must precede --search/--replace; callers must place their own literal -- before path operands.",
+        );
+      }
       const consumed = parseCommonOption(argv, index, common, state);
       if (consumed !== undefined) {
         index = consumed;
         continue;
       }
       if (argument === "--search") {
+        rewriteDefinitionStarted = true;
         search = requiredValue(argv, index, argument);
         index += 1;
         continue;
       }
       if (argument === "--replace") {
+        rewriteDefinitionStarted = true;
         replace = requiredValue(argv, index, argument);
         index += 1;
         continue;
@@ -480,6 +497,7 @@ function parseArguments(argv: readonly string[], state: ArgumentParseState): Par
       if (argument.startsWith("-")) {
         throw new Error(`Unknown option: ${argument}`);
       }
+      throw new Error("Ad-hoc PATH operands require a literal -- operand separator.");
     }
     positional.push(argument);
   }
@@ -489,10 +507,13 @@ function parseArguments(argv: readonly string[], state: ArgumentParseState): Par
   if (replace === undefined) {
     throw new Error("Missing required --replace argument.");
   }
-  if (positional.length > 1) {
-    throw new Error("Ad hoc rewriting accepts at most one PATH.");
-  }
   assertWriteMode(common);
+  const hasAdHocAuthority = common.write || common.planOut !== undefined ||
+    common.checks.length > 0 || common.explicitValidations.length > 0 ||
+    common.keepOnCheckFailure;
+  if (hasAdHocAuthority && !positionalOnly) {
+    throw new Error("Ad-hoc write, plan-output, and validation options require a literal -- operand separator (use a trailing -- for the default path).");
+  }
   return {
     kind: "rewrite",
     search,
@@ -500,7 +521,7 @@ function parseArguments(argv: readonly string[], state: ArgumentParseState): Par
     regex,
     languages,
     globs,
-    path: positional[0] ?? ".",
+    paths: positional.length === 0 ? ["."] : positional,
     ...common,
   };
 }
@@ -512,7 +533,7 @@ function adHocPlan(command: RewriteCommand, cwd: string): RewritePlan {
     root: resolve(cwd),
     operations: [{
       id: "ad-hoc",
-      paths: [command.path],
+      paths: command.paths,
       search: command.search,
       replace: command.replace,
       lexical: command.regex ? { type: "regex" } : { type: "literal" },

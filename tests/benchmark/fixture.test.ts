@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import { checkFixture, prepareFixture } from "../../src/benchmark/fixture.js";
 
 const roots: string[] = [];
 const fixtureDir = join(process.cwd(), "benchmarks", "fixtures", "textual-a");
+const fixtureRoot = join(process.cwd(), "benchmarks", "fixtures");
 async function root(): Promise<string> {
   const value = await mkdtemp(join(tmpdir(), "ripast-fixture-test-"));
   roots.push(value);
@@ -64,5 +65,24 @@ describe("benchmark fixtures", () => {
       acceptance: ["/bin/sh", "-c", "touch /tmp/owned"],
     }));
     await expect(prepareFixture(malicious, join(parent, "trial"))).rejects.toThrow(/invalid benchmark fixture manifest/);
+  });
+
+  it.each([
+    ["ts-manifest-a", "ExperimentManifest", "BenchmarkManifest", "manifest"],
+    ["ts-manifest-b", "ExperimentRecord", "BenchmarkRecord", "record"],
+  ])("rejects an incomplete %s type rename", async (fixture, oldName, newName, parameterName) => {
+    const parent = await root();
+    const trialDir = join(parent, "trial");
+    const baseline = await prepareFixture(join(fixtureRoot, fixture), trialDir);
+    const source = await readFile(join(trialDir, "src", "types.ts"), "utf8");
+    const incomplete = source
+      .replace(`interface ${oldName}`, `interface ${newName}`)
+      .replace(`${parameterName}: ${oldName}`, `${parameterName}: ${newName}`);
+    await writeFile(join(trialDir, "src", "types.ts"), incomplete, "utf8");
+
+    const result = await checkFixture({ trialDir, baseline });
+
+    expect(result.success).toBe(false);
+    expect(result.violations).toContain(`acceptance found forbidden ${JSON.stringify(`): ${oldName}`)} in src/types.ts`);
   });
 });

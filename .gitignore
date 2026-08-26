@@ -1,5 +1,4 @@
 .worktrees/
-.superpowers/sdd/
 node_modules/
 dist/
 benchmark-results/
@@ -8,4 +7,17 @@ __pycache__/
 .pytest_cache/
 *.pyc
 python/build/
-python/*.egg-info/
+*.egg-info/
+python/.venv/
+docs/_build/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+*.tgz
+*.whl
+*.tar.gz
+*.swp
+*~
+.DS_Store

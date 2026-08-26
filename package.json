@@ -23,7 +23,12 @@
   "files": [
     "dist/",
     "schemas/",
-    "benchmarks/",
+    "benchmarks/README.md",
+    "benchmarks/helpers/",
+    "benchmarks/fixtures/textual-a/",
+    "benchmarks/fixtures/textual-b/",
+    "benchmarks/fixtures/ts-manifest-a/",
+    "benchmarks/fixtures/ts-manifest-b/",
     "README.md",
     "LICENSE"
   ],
@@ -65,12 +70,12 @@
     "@ast-grep/lang-swift": "^0.0.8",
     "@ast-grep/lang-yaml": "^0.0.6",
     "@ast-grep/napi": "0.45.1",
+    "typescript": "^5.9.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "ajv": "^8.20.0",
-    "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   }
 }
