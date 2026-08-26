@@ -68,11 +68,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     try:
         forwarded, stdin_data = _compiled_invocation(arguments)
-        return launch(
-            forwarded,
-            stdin_data=stdin_data,
-            launcher_executable=sys.argv[0],
-        )
+        return launch(forwarded, stdin_data=stdin_data)
     except ExecutableNotFoundError as error:
         print(f"tfs-ripast: {error}", file=sys.stderr)
         return 2
@@ -90,5 +86,11 @@ def _exit_with_child_status(status: int) -> None:
     raise SystemExit(128 + signum)
 
 
-if __name__ == "__main__":
+def entrypoint() -> None:
+    """Exit the console script with the TypeScript child's exact status."""
+
     _exit_with_child_status(main())
+
+
+if __name__ == "__main__":
+    entrypoint()

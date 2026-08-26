@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": {{ name | tojson }},
+  "root": ".",
+  "operations": [
+  {% for item in operations %}
+    {
+      "id": {{ item["id"] | tojson }},
+      "paths": {{ item["paths"] | tojson }},
+      "search": {{ item["search"] | tojson }},
+      "replace": {{ item["replace"] | tojson }},
+      "lexical": {"type": "literal"},
+      "languages": ["typescript"]
+    }{% if not loop.last %},{% endif %}
+  {% endfor %}
+  ],
+  "policy": {},
+  "validations": []
+}

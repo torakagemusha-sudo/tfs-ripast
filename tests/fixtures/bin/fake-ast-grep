@@ -8,7 +8,7 @@ if (process.env.FAKE_PROVIDER_LOG) {
 }
 
 if (args.length === 1 && args[0] === "--version") {
-  process.stdout.write("ast-grep 88.0.0\n");
+  process.stdout.write(`${process.env.FAKE_AST_GREP_VERSION ?? "ast-grep 0.45.1"}\n`);
   process.exit(0);
 }
 

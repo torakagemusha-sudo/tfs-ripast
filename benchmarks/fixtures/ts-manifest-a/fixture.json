@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "ts-manifest-a",
+  "workload": "ts-manifest-type-rename",
+  "allowedPaths": ["src/types.ts"],
+  "acceptance": {
+    "files": [
+      {
+        "path": "src/types.ts",
+        "contains": ["interface BenchmarkManifest", "manifest: BenchmarkManifest", "\"ExperimentManifest\""],
+        "excludes": ["interface ExperimentManifest", "manifest: ExperimentManifest", "): ExperimentManifest"]
+      }
+    ]
+  }
+}

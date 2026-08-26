@@ -19,7 +19,7 @@ contributing
 
 ## Release status
 
-Version 0.1.0 is a public preview. Non-interactive execution previews changes
+Version 0.1.1 is a public preview. Non-interactive execution previews changes
 and does not write unless `--write` is supplied. Review the plan and keep a
 version-control checkpoint before applying repository-scale changes.
 

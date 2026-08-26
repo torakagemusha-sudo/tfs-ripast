@@ -7,7 +7,7 @@ Ripast combines literal and regular-expression discovery (ripgrep) with structur
 The short command `rpst` is the recommended entry point; `tfs-ripast` invokes the same CLI.
 
 ```sh
-rpst --search oldName --replace newName src          # preview only
+rpst --search oldName --replace newName -- src       # preview only
 rpst apply plan.json --write                         # explicit mutation
 rpst undo .tfs-ripast/transactions/TRANSACTION.json --write
 ```
@@ -37,7 +37,7 @@ Agents can therefore treat a rewrite as a governed state transition rather than 
 
 ## Status
 
-**Version 0.1.0 — public preview.**
+**Version 0.1.1 — public preview.**
 
 Dry-run behaviour, explicit write authority, transaction verification, and rollback are covered by the automated test suite. Review generated plans and keep a version-control checkpoint before applying large rewrites.
 
@@ -51,7 +51,7 @@ This is infrastructure, not a general-purpose pattern language. Pattern power co
 |------------|---------|
 | **Node.js ≥ 24** | Runtime |
 | **`rg` (ripgrep)** on `PATH` | Lexical discovery |
-| **`ast-grep`** on `PATH` | Structural evidence (optional for pure lexical work) |
+| **`ast-grep` 0.45.1** on `PATH` | Structural evidence (optional for pure lexical work) |
 | **Git** | Git-aware scopes (`--changed-only`, `--staged`, `--since`, `--require-clean`) |
 | **Python ≥ 3.11** | Only when compiling sandboxed Jinja plan templates |
 
@@ -78,8 +78,11 @@ Optional Python companion (Jinja plan templates):
 
 ```sh
 python -m pip install ./python
-python -m tfs_ripast --version
+tfs-ripast-py --version
 ```
+
+`tfs-ripast-py` delegates to the installed Node CLI without shadowing its
+`rpst` or `tfs-ripast` commands.
 
 ---
 
@@ -89,10 +92,10 @@ python -m tfs_ripast --version
 
 ```sh
 # Literal replacement, preview only
-rpst --search oldName --replace newName src
+rpst --search oldName --replace newName -- src
 
 # Regex, changed files only, machine-readable output
-rpst --search 'old(\w+)' --replace 'new$1' src --regex --changed-only --json
+rpst --search 'old(\w+)' --replace 'new$1' --regex --changed-only --json -- src
 ```
 
 ### Plan → inspect → apply
@@ -188,7 +191,7 @@ Security reports should follow [`SECURITY.md`](SECURITY.md). Ripast is not an OS
 
 | Command | Purpose |
 |---------|---------|
-| `rpst --search … --replace … [PATH]` | Ad-hoc rewrite (preview by default) |
+| `rpst --search … --replace … [-- PATH ...]` | Ad-hoc rewrite (preview by default) |
 | `rpst plan PLAN.json` | Resolve a RewritePlan into an EditPlan |
 | `rpst inspect EDIT-PLAN.json` | Inspect a saved EditPlan |
 | `rpst apply EDIT-PLAN.json` | Re-validate and (with `--write`) commit |
@@ -205,6 +208,7 @@ Common options:
 - `--validation-command '["/abs/path", "arg", …]'` — trusted absolute command (use only with trusted input)
 - `--write` — explicit mutation authority
 - `--dry-run` — force non-mutating (mutually exclusive with `--write`)
+- `-- PATH ...` — end option parsing and supply ad-hoc paths; required for ad-hoc writes, plan output, and validation. Put those authority options before `--search`/`--replace`, and have callers add `--` before forwarding path input.
 
 Full reference: build or read the [Sphinx documentation](docs/index.md).
 

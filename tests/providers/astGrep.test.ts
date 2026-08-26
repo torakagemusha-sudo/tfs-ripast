@@ -150,7 +150,7 @@ describe("AstGrepProvider", () => {
 
     expect(result.provider).toBe("ast-grep");
     expect(result.operationId).toBe("rename-call");
-    expect(result.version).toBe("ast-grep 88.0.0");
+    expect(result.version).toBe("ast-grep 0.45.1");
     expect(result.evidence).toHaveLength(1);
     expect(result.evidence[0]).toMatchObject({
       operationId: "rename-call",
@@ -165,6 +165,28 @@ describe("AstGrepProvider", () => {
     });
     expect(result.evidence[0]?.id).toMatch(/^evidence:[a-f0-9]{64}$/);
     expect(result.evidence[0]?.matchedTextHash).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  it("rejects an ast-grep binary that is not exactly 0.45.1", async () => {
+    await chmod(fakeAstGrep, 0o755);
+    const directory = await makeTemporaryDirectory();
+    const provider = new AstGrepProvider({
+      executable: fakeAstGrep,
+      env: { ...process.env, FAKE_AST_GREP_VERSION: "ast-grep 0.45.0" },
+    });
+
+    await expect(provider.scan({
+      root: directory,
+      operation: structuralOperation(),
+      languageDecisions: {
+        "src/app.ts": { language: "typescript", source: "extension" },
+      },
+    })).rejects.toMatchObject({
+      name: "ProviderExecutionError",
+      code: "ast-grep-version-unsupported",
+      operationId: "rename-call",
+      paths: ["src"],
+    });
   });
 
   it("reports unsupported languages and parse failures without erasing lexical evidence", async () => {
@@ -302,7 +324,7 @@ describe("AstGrepProvider", () => {
       language: "typescript",
       languageSource: "extension",
     });
-    expect(result.version).toMatch(/^ast-grep \d+\.\d+\.\d+/);
+    expect(result.version).toBe("ast-grep 0.45.1");
   });
 
   it("keeps tracked later-ignored targets while rejecting untracked ignored and reserved candidates", async () => {

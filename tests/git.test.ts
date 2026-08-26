@@ -195,10 +195,11 @@ describe("CLI Git scopes", () => {
     const capture = captureIo(root);
 
     const code = await main([
+      "--write",
       "--search", "old",
       "--replace", "new",
       "--changed-only",
-      "--write",
+      "--",
       ".",
     ], capture.io);
 
@@ -216,10 +217,11 @@ describe("CLI Git scopes", () => {
     const capture = captureIo(root);
 
     const code = await main([
+      "--write",
       "--search", "old",
       "--replace", "new",
       "--require-clean",
-      "--write",
+      "--",
       "input.txt",
     ], capture.io);
 
@@ -236,11 +238,12 @@ describe("CLI Git scopes", () => {
     const capture = captureIo(root);
 
     const code = await main([
+      "--write",
       "--search", "old($ARG)",
       "--replace", "new(${ARG})",
       "--lang", "typescript",
-      "--write",
       "--json",
+      "--",
       ".",
     ], capture.io);
 
@@ -265,9 +268,10 @@ describe("CLI Git scopes", () => {
     const capture = captureIo(root);
 
     const code = await main([
+      "--write",
       "--search", "old",
       "--replace", "new",
-      "--write",
+      "--",
       ".",
     ], capture.io);
 
@@ -282,10 +286,11 @@ describe("CLI Git scopes", () => {
     await commit(root, "baseline");
     const planned = captureIo(root);
     expect(await main([
+      "--plan-out", "saved.json",
       "--search", "old",
       "--replace", "new",
-      "--plan-out", "saved.json",
       "--json",
+      "--",
       ".",
     ], planned.io), planned.stderr.join("")).toBe(0);
     const applied = captureIo(root);
@@ -306,11 +311,12 @@ describe("CLI Git scopes", () => {
     const planned = captureIo(root);
 
     expect(await main([
+      "--plan-out", "saved.json",
       "--search", "old",
       "--replace", "new",
       "--changed-only",
-      "--plan-out", "saved.json",
       "--json",
+      "--",
       ".",
     ], planned.io), planned.stderr.join("")).toBe(0);
     const saved = JSON.parse(await readFile(join(root, "saved.json"), "utf8")) as {
@@ -355,6 +361,7 @@ describe("CLI Git scopes", () => {
       "--search", "old",
       "--replace", "new",
       "--require-clean",
+      "--",
       "input.txt",
     ], capture.io);
 
@@ -370,10 +377,11 @@ describe("CLI Git scopes", () => {
     const capture = captureIo(root);
 
     const code = await main([
+      "--write",
       "--search", "old",
       "--replace", "new",
       "--require-clean",
-      "--write",
+      "--",
       "input.txt",
     ], capture.io);
 

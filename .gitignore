@@ -1,5 +1,4 @@
 .worktrees/
-.superpowers/sdd/
 node_modules/
 dist/
 benchmark-results/

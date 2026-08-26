@@ -5,7 +5,9 @@
   "model": "configure-with---agent-command",
   "fixtureRoot": "fixtures",
   "pairs": [
-    { "workload": "textual-configuration-migration", "a": "textual-a", "b": "textual-b" }
+    { "workload": "textual-configuration-migration", "a": "textual-a", "b": "textual-b" },
+    { "workload": "kamailio-fuzz-uri-rename", "a": "kamailio-fuzz-a", "b": "kamailio-fuzz-b" },
+    { "workload": "ts-manifest-type-rename", "a": "ts-manifest-a", "b": "ts-manifest-b" }
   ],
   "timeoutMs": 900000
 }

@@ -8,25 +8,24 @@ Run these commands from the repository root:
 git clone https://github.com/torakagemusha-sudo/tfs-ripast.git
 cd tfs-ripast
 npm ci
-npm run build
-npm link
+scripts/install-local.sh --prefix "$HOME/.local"
 rpst --version
 ```
 
-`npm link` installs both `rpst` and `tfs-ripast` aliases. Use `rpst` in normal
-workflows.
+The installer writes both `rpst` and `tfs-ripast` under `$HOME/.local/bin`. Use
+`rpst` in normal workflows. Ensure that directory is on `PATH`.
 
 ## Preview a rewrite
 
 ```sh
-rpst --search oldName --replace newName src
+rpst --search oldName --replace newName -- src
 ```
 
 The default is a preview. Add `--json` for automation or `--changed-only` to
 limit discovery to changed and visible untracked files:
 
 ```sh
-rpst --search oldName --replace newName src --changed-only --json
+rpst --search oldName --replace newName --changed-only --json -- src
 ```
 
 ## Save, inspect, and apply a plan

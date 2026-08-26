@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tfs-ripast"
-version = "0.1.0"
+version = "0.1.1"
 description = "Sandboxed plan compiler and Python launcher for TFS Ripast"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,8 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tfs-ripast = "tfs_ripast.__main__:main"
-rpst = "tfs_ripast.__main__:main"
+tfs-ripast-py = "tfs_ripast.__main__:entrypoint"
 
 [project.urls]
 Homepage = "https://github.com/torakagemusha-sudo/tfs-ripast"

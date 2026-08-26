@@ -1,7 +1,7 @@
 project = "TFS Ripast"
 copyright = "2026, Torafirma Systems"
 author = "Torafirma Systems"
-release = "0.1.0"
+release = "0.1.1"
 
 extensions = ["myst_parser"]
 source_suffix = {".md": "markdown"}

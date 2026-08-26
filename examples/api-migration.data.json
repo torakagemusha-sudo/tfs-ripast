@@ -1,0 +1,11 @@
+{
+  "name": "api-migration",
+  "operations": [
+    {
+      "id": "rename-old-api",
+      "paths": ["src"],
+      "search": "oldApi($ARGS)",
+      "replace": "newApi(${ARGS})"
+    }
+  ]
+}

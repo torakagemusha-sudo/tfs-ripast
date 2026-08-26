@@ -4,6 +4,7 @@ import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { detectLanguage } from "./languages.js";
 import { compareStrings } from "./order.js";
 import { maximumProcessArgumentBytes, maximumProcessPathBytes, runArgumentVector } from "./providers/process.js";
+import { inspectPreparedSyntax } from "./syntaxInspect.js";
 import type {
   AstGrepLanguage,
   TrustedValidationCommand,
@@ -456,59 +457,6 @@ export interface PreparedValidationOutcome {
   invocations: ValidationInvocation[];
 }
 
-interface AstGrepJsonMatch {
-  text?: unknown;
-  range?: {
-    byteOffset?: {
-      start?: unknown;
-      end?: unknown;
-    };
-  };
-}
-
-const astGrepRootKinds: Readonly<Record<AstGrepLanguage, string>> = {
-  javascript: "program",
-  jsx: "program",
-  typescript: "program",
-  tsx: "program",
-  python: "module",
-  rust: "source_file",
-  go: "source_file",
-  java: "program",
-  c: "translation_unit",
-  cpp: "translation_unit",
-  csharp: "compilation_unit",
-  ruby: "program",
-  swift: "source_file",
-  kotlin: "source_file",
-  scala: "compilation_unit",
-  html: "document",
-  css: "stylesheet",
-  json: "document",
-  yaml: "stream",
-};
-
-/** The query excludes each grammar's normal zero-width root, so empty records are missing descendants. */
-function missingNodeFromDescendantCst(output: string): boolean {
-  for (const line of output.split("\n")) {
-    if (line.length === 0) {
-      continue;
-    }
-    let match: AstGrepJsonMatch;
-    try {
-      match = JSON.parse(line) as AstGrepJsonMatch;
-    } catch {
-      throw new Error("ast-grep returned an invalid complete-CST JSON record.");
-    }
-    const start = match.range?.byteOffset?.start;
-    const end = match.range?.byteOffset?.end;
-    if (match.text === "" && typeof start === "number" && start === end) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /** Runs formatter adapters against disposable prepared bytes, never against source files. */
 export async function runPreparedValidations(
   specs: readonly ValidationSpec[],
@@ -576,8 +524,7 @@ export async function runPreparedValidations(
   for (const input of inputs) {
     const path = normalizeRepositoryPath(input.path, false);
     const language = input.language ?? detectLanguage(path, []).language;
-    const executable = context.astGrepExecutable ?? "ast-grep";
-    assertTextBytes(executable, maximumValidationExecutableBytes, "Syntax validation executable");
+    const executable = "@ast-grep/napi@0.45.1";
     if (language === undefined) {
       const unsupported: ValidationInvocation = {
         source: "named-adapter",
@@ -613,11 +560,11 @@ export async function runPreparedValidations(
       });
       continue;
     }
-    const errorInvocation: ValidationInvocation = {
+    const syntaxInvocation: ValidationInvocation = {
       source: "named-adapter",
       adapter: "ast-grep-syntax",
       executable,
-      argv: ["run", "--kind", "ERROR", "--lang", language, "--json=stream", "--stdin"],
+      argv: ["parse", "--lang", language],
       cwd: ".",
       executionCwd: root,
       timeoutMs: defaultTimeoutMs,
@@ -625,89 +572,59 @@ export async function runPreparedValidations(
       stage: "precommit",
       rollbackPolicy: "not-applicable",
       targetPath: path,
-      configResolution: `real ast-grep ${language} parser ERROR-node query over prepared stdin bytes for ${path}`,
+      configResolution: `@ast-grep/napi 0.45.1 ${language} parser inspection over prepared bytes for ${path}`,
     };
-    const missingInvocation: ValidationInvocation = {
-      ...errorInvocation,
-      argv: ["run", "--kind", `:not(ERROR):not(${astGrepRootKinds[language]})`, "--lang", language, "--json=stream", "--stdin"],
-      configResolution: `real ast-grep ${language} root-excluded descendant-CST missing-node inspection over prepared stdin bytes for ${path}`,
-    };
-    invocations.push(errorInvocation, missingInvocation);
-    const syntaxPasses = [
-      {
-        invocation: errorInvocation,
-        passes: (processResult: Awaited<ReturnType<typeof runArgumentVector>>, _content: Uint8Array) =>
-          processResult.exitCode === 1 &&
-          !processResult.timedOut &&
-          !processResult.truncated &&
-          !processResult.invalidUtf8,
-      },
-      {
-        invocation: missingInvocation,
-        passes: (processResult: Awaited<ReturnType<typeof runArgumentVector>>, _content: Uint8Array) =>
-          (processResult.exitCode === 0 || processResult.exitCode === 1) &&
-          !processResult.timedOut &&
-          !processResult.truncated &&
-          !processResult.invalidUtf8 &&
-          !missingNodeFromDescendantCst(processResult.stdout),
-      },
-    ];
-    for (const syntaxPass of syntaxPasses) {
-      const invocation = syntaxPass.invocation;
-      try {
-        const content = current.get(path)!;
-        const processResult = await runArgumentVector(invocation.executable, invocation.argv, {
-          cwd: root,
-          timeoutMs: invocation.timeoutMs,
-          maxOutputBytes: invocation.maxOutputBytes,
-          env: context.env ?? process.env,
-          input: content,
-        });
-        const passed = !processResult.stdinError && syntaxPass.passes(processResult, content);
-        const failureOutput = boundedText(
-          `Prepared syntax validation failed for ${path}.\n${processResult.invalidUtf8 ? "Process output was invalid UTF-8.\n" : ""}${processResult.stdout}${processResult.stderr}`,
-          invocation.maxOutputBytes,
-        );
-        const status: ValidationResult["status"] = processResult.timedOut
-          ? "timed-out"
-          : passed ? "passed" : "failed";
-        results.push({
-          source: "named-adapter",
-          adapter: "ast-grep-syntax",
-          executable,
-          argv: invocation.argv,
-          cwd: ".",
-          actualCwd: root,
-          timeoutMs: invocation.timeoutMs,
-          stage: "precommit",
-          rollbackPolicy: "not-applicable",
-          configResolution: invocation.configResolution!,
-          timedOut: processResult.timedOut,
-          truncated: processResult.truncated || (!passed && failureOutput.truncated),
-          status,
-          exitCode: processResult.exitCode,
-          output: passed ? "" : failureOutput.value,
-        });
-      } catch (error) {
-        const output = boundedText(error, invocation.maxOutputBytes);
-        results.push({
-          source: "named-adapter",
-          adapter: "ast-grep-syntax",
-          executable,
-          argv: invocation.argv,
-          cwd: ".",
-          actualCwd: root,
-          timeoutMs: invocation.timeoutMs,
-          stage: "precommit",
-          rollbackPolicy: "not-applicable",
-          configResolution: invocation.configResolution!,
-          timedOut: false,
-          truncated: output.truncated,
-          status: "spawn-error",
-          exitCode: null,
-          output: output.value,
-        });
-      }
+    invocations.push(syntaxInvocation);
+    try {
+      const inspection = inspectPreparedSyntax(language, current.get(path)!);
+      const failures = [
+        inspection.hasError ? `found ${String(inspection.errorNodeCount)} ERROR node(s)` : undefined,
+        inspection.hasMissingDescendant ? "found a missing descendant node" : undefined,
+        inspection.hasJsFamilyDiagnostic
+          ? `found ${String(inspection.jsFamilyDiagnosticCount)} JavaScript/TypeScript parser diagnostic(s)`
+          : undefined,
+      ].filter((reason): reason is string => reason !== undefined);
+      const output = failures.length === 0 ? "" : `Prepared syntax validation failed for ${path}: ${failures.join("; ")}.`;
+      results.push({
+        source: "named-adapter",
+        adapter: "ast-grep-syntax",
+        executable,
+        argv: syntaxInvocation.argv,
+        cwd: ".",
+        actualCwd: root,
+        timeoutMs: syntaxInvocation.timeoutMs,
+        stage: "precommit",
+        rollbackPolicy: "not-applicable",
+        configResolution: syntaxInvocation.configResolution!,
+        timedOut: false,
+        truncated: false,
+        status: failures.length === 0 ? "passed" : "failed",
+        exitCode: failures.length === 0 ? 0 : 1,
+        output,
+      });
+    } catch (error) {
+      const detail = boundedText(error, syntaxInvocation.maxOutputBytes);
+      const output = boundedText(
+        `Prepared syntax validation could not inspect ${path}: ${detail.value}`,
+        syntaxInvocation.maxOutputBytes,
+      );
+      results.push({
+        source: "named-adapter",
+        adapter: "ast-grep-syntax",
+        executable,
+        argv: syntaxInvocation.argv,
+        cwd: ".",
+        actualCwd: root,
+        timeoutMs: syntaxInvocation.timeoutMs,
+        stage: "precommit",
+        rollbackPolicy: "not-applicable",
+        configResolution: syntaxInvocation.configResolution!,
+        timedOut: false,
+        truncated: detail.truncated || output.truncated,
+        status: "failed",
+        exitCode: null,
+        output: output.value,
+      });
     }
   }
   const outputs = Object.fromEntries([...current].map(([path, content]) => [path, Uint8Array.from(content)]));

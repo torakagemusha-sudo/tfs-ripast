@@ -39,6 +39,39 @@ const extensionLanguages: Readonly<Record<string, AstGrepLanguage>> = {
 
 const ambiguousExtensions = new Set(["h", "hh", "hpp", "hxx"]);
 
+/**
+ * CLI `AstGrepLanguage` ids vs `@ast-grep/napi` 0.45.1 `Lang` string enums.
+ * Builtins (Html/JavaScript/Tsx/Css/TypeScript) are PascalCase; `jsx` shares
+ * the JavaScript grammar. Other ids stay lowercase and load `@ast-grep/lang-*`
+ * extras (grammar-skew vs the CLI binary is possible; napi is pinned exact).
+ */
+const napiLanguageIds: Readonly<Record<AstGrepLanguage, string>> = {
+  javascript: "JavaScript",
+  jsx: "JavaScript",
+  typescript: "TypeScript",
+  tsx: "Tsx",
+  html: "Html",
+  css: "Css",
+  python: "python",
+  rust: "rust",
+  go: "go",
+  java: "java",
+  c: "c",
+  cpp: "cpp",
+  csharp: "csharp",
+  ruby: "ruby",
+  swift: "swift",
+  kotlin: "kotlin",
+  scala: "scala",
+  json: "json",
+  yaml: "yaml",
+};
+
+/** N-API `parse` language id for a CLI `AstGrepLanguage`. */
+export function napiLanguageId(language: AstGrepLanguage): string {
+  return napiLanguageIds[language];
+}
+
 function matchesOverrideGlob(path: string, glob: string): boolean {
   return matchesGlob(path, glob) || (!glob.includes("/") && matchesGlob(basename(path), glob));
 }

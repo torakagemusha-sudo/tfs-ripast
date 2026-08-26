@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "kamailio-fuzz-b",
+  "workload": "kamailio-fuzz-uri-rename",
+  "allowedPaths": ["src/fuzz_uri.c"],
+  "acceptance": {
+    "files": [
+      {
+        "path": "src/fuzz_uri.c",
+        "contains": ["struct parsed_sip_uri", "\"sip_uri\"", "SPDX-License-Identifier: GPL-2.0", "74015a784f"],
+        "excludes": ["struct sip_uri"]
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "@torafirma/tfs-ripast",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Safety-first repository-scale search, rewrite planning, validation, and rollback",
   "license": "Apache-2.0",
   "author": "Torafirma Systems",
@@ -12,10 +12,30 @@
   "bugs": {
     "url": "https://github.com/torakagemusha-sudo/tfs-ripast/issues"
   },
-  "keywords": ["rewrite", "refactoring", "ast-grep", "ripgrep", "codemod", "cli"],
-  "files": ["dist/", "schemas/", "benchmarks/", "README.md", "LICENSE"],
+  "keywords": [
+    "rewrite",
+    "refactoring",
+    "ast-grep",
+    "ripgrep",
+    "codemod",
+    "cli"
+  ],
+  "files": [
+    "dist/",
+    "schemas/",
+    "benchmarks/README.md",
+    "benchmarks/helpers/",
+    "benchmarks/fixtures/textual-a/",
+    "benchmarks/fixtures/textual-b/",
+    "benchmarks/fixtures/ts-manifest-a/",
+    "benchmarks/fixtures/ts-manifest-b/",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "bin": {
     "tfs-ripast": "dist/cli.js",
     "rpst": "dist/cli.js"
@@ -30,13 +50,32 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "publishConfig": { "access": "public", "provenance": true },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "packageManager": "npm@11.17.0",
-  "dependencies": { "zod": "^4.0.0" },
+  "dependencies": {
+    "@ast-grep/lang-c": "^0.0.6",
+    "@ast-grep/lang-cpp": "^0.0.6",
+    "@ast-grep/lang-csharp": "^0.0.6",
+    "@ast-grep/lang-go": "^0.0.6",
+    "@ast-grep/lang-java": "^0.0.7",
+    "@ast-grep/lang-json": "^0.0.7",
+    "@ast-grep/lang-kotlin": "^0.0.7",
+    "@ast-grep/lang-python": "^0.0.6",
+    "@ast-grep/lang-ruby": "^0.0.7",
+    "@ast-grep/lang-rust": "^0.0.7",
+    "@ast-grep/lang-scala": "^0.0.7",
+    "@ast-grep/lang-swift": "^0.0.8",
+    "@ast-grep/lang-yaml": "^0.0.6",
+    "@ast-grep/napi": "0.45.1",
+    "typescript": "^5.9.0",
+    "zod": "^4.0.0"
+  },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "ajv": "^8.20.0",
-    "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   }
 }

@@ -466,8 +466,27 @@ describe("CLI validation lifecycle", () => {
       language,
     })), { root });
 
-    expect(outcome.results).toHaveLength(languages.length * 2);
+    expect(outcome.results).toHaveLength(languages.length);
     expect(outcome.results.every((result) => result.status === "passed")).toBe(true);
+  });
+
+  it("rejects a prepared TypeScript reserved-word binding before commit", async () => {
+    const root = await temporaryRoot();
+
+    const outcome = await runPreparedValidations([], [{
+      path: "input.ts",
+      content: Buffer.from("const new = 1;\n", "utf8"),
+      mode: 0o644,
+      language: "typescript",
+    }], { root });
+
+    expect(outcome.results).toEqual([
+      expect.objectContaining({
+        adapter: "ast-grep-syntax",
+        status: "failed",
+        output: expect.stringMatching(/javascript\/typescript parser diagnostic/i),
+      }),
+    ]);
   });
 
   it("keeps a source UTF-8 BOM byte-identical through a prepared formatter", async () => {
@@ -512,7 +531,7 @@ describe("CLI validation lifecycle", () => {
         id: "rename",
         paths: ["input.ts"],
         search: "old",
-        replace: "new",
+        replace: "renamed",
         lexical: { type: "literal" },
         matchPolicy: { onUnparseable: "allow" },
       }],
@@ -540,20 +559,21 @@ describe("CLI validation lifecycle", () => {
     expect(previewAtApproval).toMatch(/stage=precommit.*rollback=not-applicable/i);
     expect(previewAtApproval).toMatch(/Git scope audit:.*root=.*mode=all/i);
     expect(previewAtApproval).toMatch(/Validation policy:.*rollback=rollback-on-failure.*authority=default/i);
-    expect(await readFile(join(root, "input.ts"), "utf8")).toContain("const new = { value: 1 /* repo-policy */ }");
+    expect(await readFile(join(root, "input.ts"), "utf8")).toContain("const renamed = { value: 1 /* repo-policy */ }");
   });
 
-  it("blocks invalid prepared syntax with real ast-grep before any rename even without a formatter", async () => {
+  it("blocks invalid prepared syntax before any rename even without a formatter", async () => {
     const root = await temporaryRoot();
     await writeFile(join(root, "input.txt"), "const value = old;\n", "utf8");
     const capture = captureIo(root);
 
     const code = await main([
+      "--write",
       "--search", "old",
       "--replace", ")",
       "--lang", "typescript",
-      "--write",
       "--json",
+      "--",
       "input.txt",
     ], capture.io);
 
@@ -569,10 +589,11 @@ describe("CLI validation lifecycle", () => {
     const capture = captureIo(root);
 
     const code = await main([
+      "--write",
       "--search", "old",
       "--replace", "function f() {",
-      "--write",
       "--json",
+      "--",
       "input.ts",
     ], capture.io);
 
@@ -582,16 +603,37 @@ describe("CLI validation lifecycle", () => {
     await expect(readdir(join(root, ".tfs-ripast", "transactions"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("blocks a reserved parameter binding reported by the TypeScript parser before any rename", async () => {
+    const root = await temporaryRoot();
+    await writeFile(join(root, "input.ts"), "function f(old: number) {}\n", "utf8");
+    const capture = captureIo(root);
+
+    const code = await main([
+      "--write",
+      "--search", "old",
+      "--replace", "new",
+      "--json",
+      "--",
+      "input.ts",
+    ], capture.io);
+
+    expect(code).toBe(1);
+    expect(capture.stderr.join("")).toMatch(/javascript\/typescript parser diagnostic/i);
+    expect(await readFile(join(root, "input.ts"), "utf8")).toBe("function f(old: number) {}\n");
+    await expect(readdir(join(root, ".tfs-ripast", "transactions"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("accepts valid whitespace-only prepared JavaScript without mistaking its empty root for a missing node", async () => {
     const root = await temporaryRoot();
     await writeFile(join(root, "input.js"), "old\n", "utf8");
     const capture = captureIo(root);
 
     const code = await main([
+      "--write",
       "--search", "old",
       "--replace", "   ",
-      "--write",
       "--json",
+      "--",
       "input.js",
     ], capture.io);
 
@@ -606,10 +648,11 @@ describe("CLI validation lifecycle", () => {
     const capture = captureIo(root);
 
     expect(await main([
+      "--write",
       "--search", "old",
       "--replace", "next",
-      "--write",
       "--json",
+      "--",
       ".",
     ], capture.io), JSON.stringify({ stdout: capture.stdout, stderr: capture.stderr }, null, 2)).toBe(0);
     const recordName = (await readdir(join(root, ".tfs-ripast", "transactions")))
@@ -648,7 +691,7 @@ describe("CLI validation lifecycle", () => {
         id: "rename",
         paths: ["input.ts"],
         search: "old",
-        replace: "new",
+        replace: "ren",
         lexical: { type: "literal" },
         matchPolicy: { onUnparseable: "allow" },
       }],
@@ -847,11 +890,12 @@ describe("CLI validation lifecycle", () => {
     const command = JSON.stringify([process.execPath, "check.mjs"]);
 
     const code = await main([
-      "--search", "old",
-      "--replace", "new",
       "--validation-command", command,
       "--write",
+      "--search", "old",
+      "--replace", "new",
       "--json",
+      "--",
       "input.txt",
     ], capture.io);
 
@@ -882,12 +926,13 @@ describe("CLI validation lifecycle", () => {
     const command = JSON.stringify([process.execPath, "check.mjs", "policy\u0001quoted\""]);
 
     const code = await main([
-      "--search", "old",
-      "--replace", "new",
       "--validation-command", command,
       "--validation-command", command,
       "--write",
+      "--search", "old",
+      "--replace", "new",
       "--json",
+      "--",
       "input.txt",
     ], capture.io);
 

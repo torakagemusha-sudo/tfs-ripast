@@ -29,13 +29,15 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
       - name: Install ast-grep
-        run: npm install --global @ast-grep/cli
+        run: npm install --global @ast-grep/cli@0.45.1
       - name: Install Python package
         run: python -m pip install './python[test]'
       - name: Install documentation tools
         run: python -m pip install './python[docs]'
       - name: Test TypeScript and CLI
         run: npm test
+      - name: Test local installer
+        run: ./tests/install-local.test.sh
       - name: Typecheck
         run: npm run typecheck
       - name: Build

@@ -8,11 +8,12 @@ Install and invoke it with repository-relative inputs:
 
 ```sh
 python -m pip install './python'
-python -m tfs_ripast plan migration.json.j2 --data migration-data.json --json --dry-run
+tfs-ripast-py plan migration.json.j2 --data migration-data.json --json --dry-run
 ```
 
-The package also exposes `rpst` and `tfs-ripast` console entry points for
-delegation to the TypeScript CLI.
+The package exposes the non-colliding `tfs-ripast-py` console entry point for
+delegation to the TypeScript CLI. `rpst` and `tfs-ripast` remain the Node CLI
+commands.
 
 ## Supported subset
 

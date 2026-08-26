@@ -158,7 +158,7 @@ describe("CLI discovery", () => {
     const capture = captureIo();
     expect(await main(["--version"], capture.io)).toBe(0);
     expect(capture.stderr).toEqual([]);
-    expect(capture.stdout.join("")).toBe("tfs-ripast 0.1.0\n");
+    expect(capture.stdout.join("")).toBe("tfs-ripast 0.1.1\n");
   });
 });
 
@@ -207,7 +207,7 @@ function rehashEditPlan(plan: EditPlan): void {
 describe("CLI safety policy", () => {
   it("rejects --dry-run with --write before scanning", async () => {
     const capture = captureIo();
-    const code = await main(["--search", "old", "--replace", "new", "--dry-run", "--write"], capture.io);
+    const code = await main(["--write", "--search", "old", "--replace", "new", "--dry-run"], capture.io);
 
     expect(code).toBe(1);
     expect(capture.stderr.join("")).toMatch(/mutually exclusive/i);
@@ -513,13 +513,14 @@ describe("CLI plan protocols and output", () => {
     });
 
     const code = await main([
+      "--plan-out", "saved-plan.json",
       "--search", "absentCall()",
       "--replace", "nextCall()",
       "--lang", "typescript",
       "--lang", "javascript",
       "--glob", "*.ts",
       "--glob", "!vendor/**",
-      "--plan-out", "saved-plan.json",
+      "--",
       "input.ts",
     ], capture.io);
 
@@ -536,12 +537,13 @@ describe("CLI plan protocols and output", () => {
     const capture = captureIo({ cwd: root });
 
     const code = await main([
+      "--write",
       "--search", "old($ARG);",
       "--replace", "new(${ARG});",
       "--lang", "c",
       "--lang", "cpp",
-      "--write",
       "--json",
+      "--",
       "ambiguous.h",
     ], capture.io);
 
@@ -680,7 +682,7 @@ describe("CLI plan protocols and output", () => {
     await writeFile(join(root, "input.ts"), "const value = 1;\n", "utf8");
     const capture = captureIo({ cwd: root });
 
-    const code = await main(["--search", "absent", "--replace", "new", "."], capture.io);
+    const code = await main(["--search", "absent", "--replace", "new", "--", "."], capture.io);
 
     expect(code).toBe(0);
     expect(capture.stderr.join("")).not.toMatch(/escape|node_modules/i);
@@ -696,14 +698,107 @@ describe("CLI plan protocols and output", () => {
     const capture = captureIo({ cwd: root });
 
     const code = await main([
+      "--write",
       "--search", "old",
       "--replace", "new",
-      "--write",
+      "--",
       ".",
     ], capture.io);
 
     expect(code).toBe(0);
     expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("new\n");
+  });
+
+  it("applies one ad-hoc rewrite across multiple PATH operands", async () => {
+    const root = await temporaryRepository();
+    await mkdir(join(root, "first"));
+    await mkdir(join(root, "second"));
+    await writeFile(join(root, "first", "input.txt"), "old first\n", "utf8");
+    await writeFile(join(root, "second", "input.txt"), "old second\n", "utf8");
+    const capture = captureIo({ cwd: root });
+
+    const code = await main([
+      "--write",
+      "--search", "old",
+      "--replace", "new",
+      "--",
+      "first",
+      "second",
+    ], capture.io);
+
+    expect(code, capture.stderr.join("")).toBe(0);
+    expect(await readFile(join(root, "first", "input.txt"), "utf8")).toBe("new first\n");
+    expect(await readFile(join(root, "second", "input.txt"), "utf8")).toBe("new second\n");
+  });
+
+  it("requires an explicit operand separator before ad-hoc paths and write authority", async () => {
+    const root = await temporaryRepository();
+    await writeFile(join(root, "input.txt"), "old\n", "utf8");
+    const capture = captureIo({ cwd: root });
+    const validationCapture = captureIo({ cwd: root });
+
+    const code = await main([
+      "--write",
+      "--search", "old",
+      "--replace", "new",
+      "input.txt",
+    ], capture.io);
+
+    expect(code).toBe(1);
+    expect(capture.stderr.join("")).toMatch(/literal --|operand separator/i);
+    expect(await readFile(join(root, "input.txt"), "utf8")).toBe("old\n");
+
+    expect(await main([
+      "--check", "npm-test",
+      "--search", "old",
+      "--replace", "new",
+    ], validationCapture.io)).toBe(1);
+    expect(validationCapture.stderr.join("")).toMatch(/literal --|operand separator/i);
+  });
+
+  it("rejects authority tokens appended as untrusted ad-hoc path input", async () => {
+    const root = await temporaryRepository();
+    await writeFile(join(root, "input.txt"), "old\n", "utf8");
+    const writeCapture = captureIo({ cwd: root });
+    const validationCapture = captureIo({ cwd: root });
+
+    expect(await main([
+      "--search", "old",
+      "--replace", "new",
+      "--write",
+      "--",
+      "input.txt",
+    ], writeCapture.io)).toBe(1);
+    expect(writeCapture.stderr.join("")).toMatch(/authority options must precede/i);
+    expect(await readFile(join(root, "input.txt"), "utf8")).toBe("old\n");
+
+    expect(await main([
+      "--search", "old",
+      "--replace", "new",
+      "--validation-command", '["/bin/echo","unexpected"]',
+      "--",
+      "input.txt",
+    ], validationCapture.io)).toBe(1);
+    expect(validationCapture.stderr.join("")).toMatch(/authority options must precede/i);
+  });
+
+  it("treats a repository file named --write as an operand after the separator", async () => {
+    const root = await temporaryRepository();
+    await writeFile(join(root, "--write"), "const oldName = 1;\n", "utf8");
+    const capture = captureIo({ cwd: root });
+
+    const code = await main([
+      "--search", "oldName",
+      "--replace", "newName",
+      "--lang", "typescript",
+      "--json",
+      "--",
+      "--write",
+    ], capture.io);
+
+    expect(code).toBe(0);
+    expect(JSON.parse(capture.stdout.join(""))).toMatchObject({ outcome: "previewed" });
+    expect(await readFile(join(root, "--write"), "utf8")).toBe("const oldName = 1;\n");
   });
 
   it("rejects a saved edit plan whose embedded rewrite-plan hash was changed", async () => {
@@ -769,7 +864,7 @@ describe("CLI plan protocols and output", () => {
   it("emits one stable JSON document on stdout and diagnostics only on stderr", async () => {
     const first = captureIo();
     const second = captureIo();
-    const argv = ["--json", "--search", "old", "--replace", "new", "--dry-run", "--write"];
+    const argv = ["--json", "--write", "--search", "old", "--replace", "new", "--dry-run"];
 
     expect(await main(argv, first.io)).toBe(1);
     expect(await main(argv, second.io)).toBe(1);
@@ -938,9 +1033,10 @@ describe("CLI plan protocols and output", () => {
     const oversizedReplacement = "x".repeat(8 * 1024 * 1024);
 
     const code = await main([
+      "--plan-out", "oversized-plan.json",
       "--search", "absent",
       "--replace", oversizedReplacement,
-      "--plan-out", "oversized-plan.json",
+      "--",
       "input.txt",
     ], capture.io);
 
@@ -1038,9 +1134,10 @@ describe("CLI plan protocols and output", () => {
     const capture = captureIo({ cwd: root });
 
     const code = await main([
+      "--plan-out", "out/plan.json",
       "--search", "absent",
       "--replace", "new",
-      "--plan-out", "out/plan.json",
+      "--",
       "input.txt",
     ], capture.io, { fileSystem: injected });
 
@@ -1075,9 +1172,10 @@ describe("CLI plan protocols and output", () => {
     const capture = captureIo({ cwd: root });
 
     const code = await main([
+      "--plan-out", "saved-plan.json",
       "--search", "absent",
       "--replace", "new",
-      "--plan-out", "saved-plan.json",
+      "--",
       "input.txt",
     ], capture.io, { fileSystem: injected });
 
@@ -1107,9 +1205,10 @@ describe("CLI plan protocols and output", () => {
     const capture = captureIo({ cwd: root });
 
     const code = await main([
+      "--plan-out", "saved-plan.json",
       "--search", "absent",
       "--replace", "new",
-      "--plan-out", "saved-plan.json",
+      "--",
       "input.txt",
     ], capture.io, { fileSystem: injected });
 
@@ -1144,10 +1243,11 @@ describe("CLI plan protocols and output", () => {
     const capture = captureIo({ cwd: root });
 
     const code = await main([
+      "--plan-out", "saved-plan.json",
       "--search", "absent",
       "--replace", "new",
-      "--plan-out", "saved-plan.json",
       "--json",
+      "--",
       "input.txt",
     ], capture.io, { fileSystem: injected });
 
@@ -1169,7 +1269,7 @@ describe("CLI plan protocols and output", () => {
   it("uses parsed option tokens, not values, as JSON output authority", async () => {
     const capture = captureIo();
 
-    const code = await main(["--search", "--json", "--replace", "new", "missing-path"], capture.io);
+    const code = await main(["--search", "--json", "--replace", "new", "--", "missing-path"], capture.io);
 
     expect(code).toBe(2);
     expect(capture.stdout).toEqual([]);
@@ -1248,6 +1348,7 @@ describe("CLI plan protocols and output", () => {
       "--search", "old",
       "--replace", "new",
       "--json",
+      "--",
       "missing-path",
     ], capture.io);
 
@@ -1274,6 +1375,7 @@ describe("CLI plan protocols and output", () => {
       "--search", "old",
       "--replace", "new",
       "--json",
+      "--",
       "input.ts",
     ], capture.io, { ripgrepExecutable: join(root, "missing-rg") });
 
