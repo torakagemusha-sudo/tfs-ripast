@@ -4,7 +4,7 @@
 
 Ripast combines literal and regular-expression discovery (ripgrep) with structural evidence (ast-grep), produces reviewable edit plans, enforces scope and validation gates, and records reversible transactions.
 
-The short command `rpst` is the recommended entry point; `tfs-ripast` invokes the same CLI.
+The short command `rpst` is the recommended entry point; `tfs-ripast` is the same CLI under a longer alias.
 
 ```sh
 rpst --search oldName --replace newName -- src       # preview only
@@ -47,32 +47,42 @@ This is infrastructure, not a general-purpose pattern language. Pattern power co
 
 ## Requirements
 
+Git is optional until a Git-only scope (`--changed-only`, `--staged`, `--since`, `--require-clean`, `--tracked-only`) is requested.
+
 | Dependency | Purpose |
 |------------|---------|
 | **Node.js ≥ 24** | Runtime |
 | **`rg` (ripgrep)** on `PATH` | Lexical discovery |
 | **`ast-grep` 0.45.1** on `PATH` | Structural evidence (optional for pure lexical work) |
-| **Git** | Git-aware scopes (`--changed-only`, `--staged`, `--since`, `--require-clean`) |
+| **Git** | Git-aware scopes only |
 | **Python ≥ 3.11** | Only when compiling sandboxed Jinja plan templates |
 
 ---
 
 ## Install
 
+Recommended path from a clone:
+
 ```sh
 git clone https://github.com/torakagemusha-sudo/tfs-ripast.git
 cd tfs-ripast
 npm ci
-npm run build
-npm link
+scripts/install-local.sh --prefix "$HOME/.local"
+rpst --version
 ```
 
-Verify:
+The installer writes both `rpst` and `tfs-ripast` under `$HOME/.local/bin`. Put that directory on `PATH` and use `rpst` as the command voice.
+
+Alternative (Node-global link):
 
 ```sh
+npm ci
+npm run build
+npm link
 rpst --version
-rpst --help
 ```
+
+Do not mix the two recipes in the same shell without knowing which binary `PATH` resolves first. Details: [Getting started](docs/getting-started.md).
 
 Optional Python companion (Jinja plan templates):
 
@@ -98,18 +108,17 @@ rpst --search oldName --replace newName -- src
 rpst --search 'old(\w+)' --replace 'new$1' --regex --changed-only --json -- src
 ```
 
-### Plan → inspect → apply
+### Complete RewritePlan example
+
+A schema-valid plan is checked in at [`examples/rewrite-plan.example.json`](examples/rewrite-plan.example.json). Copy it, change the search and paths, then:
 
 ```sh
-# Resolve a rewrite plan and save the edit plan
-rpst plan rewrite-plan.json --plan-out .tfs-ripast/plans/migration.json
-
-# Inspect without writing
+rpst plan examples/rewrite-plan.example.json --plan-out .tfs-ripast/plans/migration.json
 rpst inspect .tfs-ripast/plans/migration.json
-
-# Apply with explicit write authority
 rpst apply .tfs-ripast/plans/migration.json --write
 ```
+
+The example declares one literal operation, file/match/byte limits, `requireClean: true`, and a recommended `typescript-typecheck`. Validations in the plan are recommendations only; authorize a named adapter with `--check` if you want it to run.
 
 ### Verify and undo
 
@@ -135,7 +144,7 @@ A strict, versioned JSON document that declares:
 
 Plans are data. They do not execute validations or grant write authority.
 
-See [`schemas/rewrite-plan.schema.json`](schemas/rewrite-plan.schema.json).
+See [`schemas/rewrite-plan.schema.json`](schemas/rewrite-plan.schema.json) and the landing example above.
 
 ### 2. Evidence and correlation
 
@@ -308,4 +317,4 @@ Apache-2.0. See [`LICENSE`](LICENSE).
 
 ---
 
-*TFS Ripast is part of the Torafirma Systems work on governed machine mutation — persistent identity, bounded authority, and reversible state change.*
+*TFS Ripast is part of the ToraFirma Systems work on governed machine mutation — persistent identity, bounded authority, and reversible state change.*
