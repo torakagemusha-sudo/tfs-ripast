@@ -1,6 +1,6 @@
 # Command reference
 
-All commands are available through `rpst` and `tfs-ripast`.
+Use `rpst` as the command voice. `tfs-ripast` is the same binary under a longer alias.
 
 ## Common options
 
@@ -36,7 +36,7 @@ not an authority boundary.
 Resolve a strict rewrite plan into an edit plan:
 
 ```sh
-rpst plan rewrite-plan.json --plan-out .tfs-ripast/plans/migration.json
+rpst plan examples/rewrite-plan.example.json --plan-out .tfs-ripast/plans/migration.json
 ```
 
 Validation entries serialized in a plan are recommendations. A named adapter

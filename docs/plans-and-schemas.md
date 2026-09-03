@@ -9,6 +9,9 @@ Rewrite plans are versioned JSON documents. Their operations declare:
 - Git scope requirements; and
 - validation recommendations.
 
+Copy a complete, schema-valid example from
+[`examples/rewrite-plan.example.json`](../examples/rewrite-plan.example.json).
+
 The JSON schemas are checked into the repository's `schemas/` directory:
 
 - [`rewrite-plan.schema.json`](https://github.com/torakagemusha-sudo/tfs-ripast/blob/main/schemas/rewrite-plan.schema.json)
@@ -16,7 +19,7 @@ The JSON schemas are checked into the repository's `schemas/` directory:
 - [`transaction.schema.json`](https://github.com/torakagemusha-sudo/tfs-ripast/blob/main/schemas/transaction.schema.json)
 
 JSON Schema validation is supplemented by semantic validation. Read
-Read [`SEMANTIC_VALIDATION.md`](https://github.com/torakagemusha-sudo/tfs-ripast/blob/main/schemas/SEMANTIC_VALIDATION.md)
+[`SEMANTIC_VALIDATION.md`](https://github.com/torakagemusha-sudo/tfs-ripast/blob/main/schemas/SEMANTIC_VALIDATION.md)
 before generating plans in another tool.
 
 ## Relative-path rule

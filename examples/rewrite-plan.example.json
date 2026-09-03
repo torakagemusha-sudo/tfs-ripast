@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "name": "rename-legacy-config-key",
+  "root": ".",
+  "operations": [
+    {
+      "id": "rename-apiBase-to-apiRoot",
+      "paths": ["src"],
+      "search": "apiBase",
+      "replace": "apiRoot",
+      "lexical": { "type": "literal" },
+      "languages": ["typescript"],
+      "globs": ["**/*.ts"],
+      "matchPolicy": {
+        "require": "eligible",
+        "onUnparseable": "skip"
+      },
+      "expectedCount": { "min": 1 },
+      "conflictPolicy": { "onConflict": "reject" }
+    }
+  ],
+  "policy": {
+    "maxFiles": 50,
+    "maxMatches": 200,
+    "maxChangedBytes": 8192,
+    "maxRepositoryPercent": 5,
+    "respectGitIgnore": true,
+    "requireClean": true,
+    "keepOnCheckFailure": false
+  },
+  "validations": [
+    {
+      "type": "typescript-typecheck",
+      "cwd": ".",
+      "timeoutMs": 120000,
+      "maxOutputBytes": 262144
+    }
+  ]
+}
