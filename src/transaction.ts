@@ -5,6 +5,7 @@ import {
   link,
   lstat,
   mkdir,
+  open,
   readFile,
   realpath,
   rename,
@@ -38,6 +39,31 @@ export interface TransactionFileSystem {
   stat(path: string): Promise<Stats>;
   lstat(path: string): Promise<Stats>;
   realpath(path: string): Promise<string>;
+  /** Flushes one file's contents to durable storage. */
+  syncFile(path: string): Promise<void>;
+  /**
+   * Flushes a directory's entries (rename durability). Platforms without
+   * directory fsync support may ignore this operation.
+   */
+  syncDirectory(path: string): Promise<void>;
+}
+
+function isUnsupportedDirectorySync(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "EPERM" || error.code === "EISDIR" || error.code === "EINVAL" || error.code === "ENOTDIR")
+  );
+}
+
+async function syncFileHandle(path: string): Promise<void> {
+  const handle = await open(path, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
 }
 
 export const nodeTransactionFileSystem: TransactionFileSystem = {
@@ -53,6 +79,16 @@ export const nodeTransactionFileSystem: TransactionFileSystem = {
   stat: async (path) => stat(path),
   lstat: async (path) => lstat(path),
   realpath: async (path) => realpath(path),
+  syncFile: async (path) => syncFileHandle(path),
+  syncDirectory: async (path) => {
+    try {
+      await syncFileHandle(path);
+    } catch (error) {
+      if (!isUnsupportedDirectorySync(error)) {
+        throw error;
+      }
+    }
+  },
 };
 
 export interface TransactionOptions {
@@ -486,19 +522,75 @@ export function preparedTransactionPreview(prepared: PreparedTransaction): strin
     .join("\n");
 }
 
+function lockHolderPid(content: string): number | undefined {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "pid" in parsed &&
+      typeof parsed.pid === "number" &&
+      Number.isInteger(parsed.pid) &&
+      parsed.pid > 0
+    ) {
+      return parsed.pid;
+    }
+  } catch {
+    // Unparseable lock payloads are treated as live locks; fail closed.
+  }
+  return undefined;
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the process exists but is owned by another user.
+    return (
+      typeof error === "object" && error !== null && "code" in error && error.code === "EPERM"
+    );
+  }
+}
+
+async function tryReclaimStaleLock(lockPath: string, fs: TransactionFileSystem): Promise<boolean> {
+  let content: string;
+  try {
+    content = (await fs.readFile(lockPath)).toString("utf8");
+  } catch {
+    return false;
+  }
+  const pid = lockHolderPid(content);
+  if (pid === undefined || pidAlive(pid)) {
+    return false;
+  }
+  // The recorded holder is gone. Best-effort unlink; only one racing claimant wins it.
+  try {
+    await fs.unlink(lockPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function acquireLock(root: string, id: string, fs: TransactionFileSystem): Promise<string> {
   const stateDirectory = join(root, ".tfs-ripast");
   await ensureContainedDirectory(root, stateDirectory, fs);
   const lockPath = join(stateDirectory, "lock");
-  try {
-    await fs.writeFile(lockPath, `${JSON.stringify({ id, pid: process.pid })}\n`, { flag: "wx", mode: 0o600 });
-  } catch (error) {
-    if (isExisting(error)) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await fs.writeFile(lockPath, `${JSON.stringify({ id, pid: process.pid })}\n`, { flag: "wx", mode: 0o600 });
+      return lockPath;
+    } catch (error) {
+      if (!isExisting(error)) {
+        throw error;
+      }
+      if (attempt === 0 && await tryReclaimStaleLock(lockPath, fs)) {
+        continue;
+      }
       throw new Error(`Repository transaction lock is held; another transaction may be in progress`);
     }
-    throw error;
   }
-  return lockPath;
 }
 
 async function ensureContainedDirectory(
@@ -554,9 +646,21 @@ async function writeExclusive(
   await fs.writeFile(path, content, { flag: "wx", mode });
   try {
     await fs.chmod(path, mode);
+    await fs.syncFile(path);
   } catch (error) {
     await safeUnlink(path, fs);
     throw error;
+  }
+}
+
+/** Rename durability: flush every affected directory once, after a rename batch. */
+async function syncRenamedDirectories(paths: Iterable<string>, fs: TransactionFileSystem): Promise<void> {
+  const directories = new Set<string>();
+  for (const path of paths) {
+    directories.add(dirname(path));
+  }
+  for (const directory of directories) {
+    await fs.syncDirectory(directory);
   }
 }
 
@@ -731,6 +835,7 @@ async function persistRecord(
   await writeExclusive(temporary, serialized, 0o600, fs);
   try {
     await fs.rename(temporary, destination);
+    await fs.syncDirectory(recordsDirectory);
   } catch (error) {
     await safeUnlink(temporary, fs);
     throw error;
@@ -820,6 +925,7 @@ export async function commitTransaction(
         await fs.rename(sibling.afterPath, sibling.absolutePath);
         renamed.push(sibling);
       }
+      await syncRenamedDirectories(renamed.map((sibling) => sibling.absolutePath), fs);
       await verifyPreparedOutputs(authoritative);
       if (options.runPostcommitValidations !== undefined) {
         try {
@@ -880,6 +986,7 @@ export async function commitTransaction(
             rollbackComplete = false;
           }
         }
+        await syncRenamedDirectories(renamed.map((sibling) => sibling.absolutePath), fs);
         if (rollbackComplete) {
           for (const file of authoritative.files) {
             try {
@@ -909,6 +1016,7 @@ export async function commitTransaction(
           rollbackComplete = false;
         }
       }
+      await syncRenamedDirectories(renamed.map((sibling) => sibling.absolutePath), fs);
       const state: TransactionRecord["state"] = renamed.length === 0
         ? "failed"
         : rollbackComplete ? "rolled-back" : "partial-commit";
@@ -1116,6 +1224,7 @@ export async function undoTransaction(
         await fs.rename(file.beforePath, file.absolutePath);
         restored.push(file);
       }
+      await syncRenamedDirectories(restored.map((file) => file.absolutePath), fs);
       for (const file of restoreFiles) {
         const current = await readStableFile(root, file.path, fs);
         if (sha256(current.content) !== file.beforeHash || (current.info.mode & 0o7777) !== file.beforeMode) {
