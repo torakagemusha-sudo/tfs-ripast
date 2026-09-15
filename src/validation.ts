@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { access, open, realpath } from "node:fs/promises";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { normalizeRepositoryPath as normalizeEvidencePath } from "./evidence.js";
 import { detectLanguage } from "./languages.js";
 import { compareStrings } from "./order.js";
 import { maximumProcessArgumentBytes, maximumProcessPathBytes, runArgumentVector } from "./providers/process.js";
@@ -86,21 +87,15 @@ function isContained(root: string, candidate: string): boolean {
   return fromRoot === "" || (!isAbsolute(fromRoot) && fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`));
 }
 
+// Single source of truth for repository-relative path normalization lives in
+// evidence.ts; validation adds only byte/trailing-slash policy and the reserved
+// top-level state check on top of it.
 function normalizeRepositoryPath(path: string, allowRoot = true): string {
   assertTextBytes(path, maximumProcessPathBytes, "Validation path");
-  if (
-    path.trim().length === 0 ||
-    isAbsolute(path) ||
-    path.includes("\\") ||
-    /[\u0000-\u001f]/u.test(path) ||
-    path.split("/").includes("..")
-  ) {
+  if (path.trim().length === 0) {
     throw new Error(`Validation path must be a contained repository-relative POSIX path: ${path}`);
   }
-  const normalized = path.replace(/^\.\//u, "").replace(/\/{2,}/gu, "/").replace(/\/$/u, "") || ".";
-  if (!allowRoot && normalized === ".") {
-    throw new Error("Validation file path cannot name the repository root.");
-  }
+  const normalized = normalizeEvidencePath(path, allowRoot).replace(/\/+$/u, "") || ".";
   const top = normalized.split("/", 1)[0];
   if (top === ".git" || top === ".tfs-ripast") {
     throw new Error(`Validation path uses reserved repository state: ${normalized}`);

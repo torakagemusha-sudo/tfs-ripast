@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
 import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
@@ -430,6 +431,41 @@ describe("commitTransaction", () => {
     const plan = editPlan(root, await snapshots(root, ["input.txt"]), { "input.txt": "new" });
     await mkdir(join(root, ".tfs-ripast"));
     await writeFile(join(root, ".tfs-ripast", "lock"), "held", { flag: "wx" });
+
+    await expect(commitTransaction(await prepareTransaction(plan))).rejects.toThrow(/lock|transaction.*progress/i);
+    expect(await readFile(join(root, "input.txt"), "utf8")).toBe("old\n");
+  });
+
+  it("reclaims a stale lock left behind by a dead process", async () => {
+    const root = await temporaryRepository();
+    await writeFile(join(root, "input.txt"), "old\n");
+    const plan = editPlan(root, await snapshots(root, ["input.txt"]), { "input.txt": "new" });
+    await mkdir(join(root, ".tfs-ripast"));
+    // A pid from an already-exited child is guaranteed dead without racing pid reuse.
+    const child = spawn(process.execPath, ["-e", "process.exit(0)"]);
+    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    const deadPid = child.pid ?? Number.MAX_SAFE_INTEGER - 1;
+    await writeFile(
+      join(root, ".tfs-ripast", "lock"),
+      `${JSON.stringify({ id: "transaction-crashed", pid: deadPid })}\n`,
+      { flag: "wx" },
+    );
+
+    const record = await commitTransaction(await prepareTransaction(plan));
+    expect(record.state).toBe("committed");
+    expect(await readFile(join(root, "input.txt"), "utf8")).toBe("new\n");
+  });
+
+  it("refuses to reclaim a lock whose recorded holder process is still alive", async () => {
+    const root = await temporaryRepository();
+    await writeFile(join(root, "input.txt"), "old\n");
+    const plan = editPlan(root, await snapshots(root, ["input.txt"]), { "input.txt": "new" });
+    await mkdir(join(root, ".tfs-ripast"));
+    await writeFile(
+      join(root, ".tfs-ripast", "lock"),
+      `${JSON.stringify({ id: "transaction-live", pid: process.pid })}\n`,
+      { flag: "wx" },
+    );
 
     await expect(commitTransaction(await prepareTransaction(plan))).rejects.toThrow(/lock|transaction.*progress/i);
     expect(await readFile(join(root, "input.txt"), "utf8")).toBe("old\n");
