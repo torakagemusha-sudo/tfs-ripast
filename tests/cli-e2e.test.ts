@@ -265,3 +265,30 @@ describe("compiled CLI end to end", () => {
     expect(await readFile(join(root, "input.txt"), "utf8")).toBe("old\n");
   });
 });
+
+describe("maintenance commands end to end", () => {
+  it("gc dry-run reports committed transactions as kept", async () => {
+    const root = await temporaryDirectory("tfs-ripast-e2e-gc-");
+    await writeFile(join(root, "input.txt"), "old\n", "utf8");
+    const write = runCli(root, ["--write", "--search", "old", "--replace", "new", "--json", "--", "input.txt"]);
+    expect(write.status).toBe(0);
+
+    const gc = runCli(root, ["gc"]);
+    expect(gc.status, `${gc.stdout}\n${gc.stderr}`).toBe(0);
+    expect(gc.stdout).toContain("kept");
+    expect(gc.stderr).toMatch(/dry-run/i);
+  });
+
+  it("repair refuses a committed transaction and leaves files untouched", async () => {
+    const root = await temporaryDirectory("tfs-ripast-e2e-repair-");
+    await writeFile(join(root, "input.txt"), "old\n", "utf8");
+    const write = runCli(root, ["--write", "--search", "old", "--replace", "new", "--json", "--", "input.txt"]);
+    expect(write.status).toBe(0);
+    const { transactionId } = JSON.parse(write.stdout) as { transactionId: string };
+
+    const repair = runCli(root, ["repair", "--json", join(".tfs-ripast", "transactions", `${transactionId}.json`)]);
+    expect(repair.status).toBe(1);
+    expect(JSON.parse(repair.stdout)).toMatchObject({ command: "repair", outcome: "failed" });
+    expect(await readFile(join(root, "input.txt"), "utf8")).toBe("new\n");
+  });
+});

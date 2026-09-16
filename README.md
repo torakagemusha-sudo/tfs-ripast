@@ -130,6 +130,27 @@ rpst undo   .tfs-ripast/transactions/TRANSACTION.json --write  # restore
 
 `--dry-run` and `--write` are mutually exclusive. Non-interactive execution never mutates without `--write`.
 
+### Recovery and retention
+
+A transaction ends in `partial-commit` only when its automatic rollback itself failed halfway — some files hold committed content, others already hold their before-state. `rpst repair` classifies every recorded file against those two known states, restores the committed files from their retained before-images (under the repository lock, with sibling files and verified renames), and persists the record as `rolled-back`. Any file in a third state — a later user edit — blocks the repair entirely; nothing is written.
+
+```sh
+rpst repair .tfs-ripast/transactions/TRANSACTION.json          # preview
+rpst repair .tfs-ripast/transactions/TRANSACTION.json --write  # restore
+```
+
+Retained before-images under `.tfs-ripast/transactions/` grow without bound by design (undo depends on them). `rpst gc` prunes dead weight: before-images of transactions that can never be undone again (`undone`, `rolled-back`, `failed`). Committed transactions stay undoable unless you opt in.
+
+```sh
+rpst gc                                   # dry-run report
+rpst gc --write                           # prune never-undoable before-images
+rpst gc --write --include-undoable \
+  --older-than 30                         # also prune undoable transactions older than 30 days
+rpst gc --write --remove-records          # also remove the transaction JSON records
+```
+
+`partial-commit` records are never pruned — run `repair` first and decide explicitly.
+
 ---
 
 ## Core concepts
@@ -206,6 +227,8 @@ Security reports should follow [`SECURITY.md`](SECURITY.md). Ripast is not an OS
 | `rpst apply EDIT-PLAN.json` | Re-validate and (with `--write`) commit |
 | `rpst verify TRANSACTION.json` | Verify current hashes against a transaction record |
 | `rpst undo TRANSACTION.json` | Preview or (with `--write`) restore before-images |
+| `rpst repair TRANSACTION.json` | Assisted recovery for a `partial-commit` transaction (preview by default) |
+| `rpst gc` | Bounded retention of transaction storage (dry-run by default) |
 
 Common options:
 

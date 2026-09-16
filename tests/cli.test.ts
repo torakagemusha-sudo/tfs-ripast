@@ -1420,3 +1420,95 @@ describe("CLI plan protocols and output", () => {
     });
   });
 });
+
+describe("maintenance command JSON output", () => {
+  async function committedTransaction(root: string): Promise<{ transactionId: string; recordPath: string }> {
+    const planPath = await savedEditPlan(root);
+    const writeCapture = captureIo({ cwd: root });
+    expect(await main(["apply", planPath, "--write", "--json"], writeCapture.io)).toBe(0);
+    const { transactionId } = JSON.parse(writeCapture.stdout.join("")) as { transactionId: string };
+    return {
+      transactionId,
+      recordPath: join(root, ".tfs-ripast", "transactions", `${transactionId}.json`),
+    };
+  }
+
+  it("reports gc dry-run as previewed and keeps undoable committed before-images", async () => {
+    const root = await temporaryRepository();
+    const { transactionId } = await committedTransaction(root);
+
+    const capture = captureIo({ cwd: root });
+    expect(await main(["gc", "--json"], capture.io)).toBe(0);
+
+    const result = JSON.parse(capture.stdout.join(""));
+    expect(result).toMatchObject({ command: "gc", outcome: "previewed" });
+    expect(result.gc.write).toBe(false);
+    expect(result.gc.entries).toEqual([
+      expect.objectContaining({ id: transactionId, state: "committed", prunable: false, pruned: [] }),
+    ]);
+    const retained = await readdir(join(root, ".tfs-ripast", "transactions", transactionId, "before"));
+    expect(retained).toContain("input.txt");
+  });
+
+  it("prunes committed before-images with --write --include-undoable and reports pruned", async () => {
+    const root = await temporaryRepository();
+    const { transactionId, recordPath } = await committedTransaction(root);
+
+    const capture = captureIo({ cwd: root });
+    expect(await main(["gc", "--write", "--include-undoable", "--json"], capture.io)).toBe(0);
+
+    const result = JSON.parse(capture.stdout.join(""));
+    expect(result).toMatchObject({ command: "gc", outcome: "pruned" });
+    expect(result.gc.write).toBe(true);
+    const entry = (result.gc.entries as Array<{
+      id: string;
+      prunable: boolean;
+      pruned: string[];
+      recordRemoved: boolean;
+    }>).find((candidate) => candidate.id === transactionId);
+    expect(entry).toBeDefined();
+    expect(entry?.prunable).toBe(true);
+    expect(entry?.pruned.length).toBeGreaterThan(0);
+    expect(entry?.recordRemoved).toBe(false);
+    await expect(readdir(join(root, ".tfs-ripast", "transactions", transactionId, "before"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(JSON.parse(await readFile(recordPath, "utf8"))).toMatchObject({ id: transactionId, state: "committed" });
+  });
+
+  it("previews then applies assisted repair for a partial-commit transaction", async () => {
+    const root = await temporaryRepository();
+    const { transactionId, recordPath } = await committedTransaction(root);
+    const record = JSON.parse(await readFile(recordPath, "utf8")) as TransactionRecord;
+    record.state = "partial-commit";
+    await writeFile(recordPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+
+    const preview = captureIo({ cwd: root });
+    expect(await main(["repair", recordPath, "--json"], preview.io)).toBe(0);
+    const previewResult = JSON.parse(preview.stdout.join(""));
+    expect(previewResult).toMatchObject({
+      command: "repair",
+      outcome: "previewed",
+      transactionId,
+      state: "partial-commit",
+    });
+    expect(previewResult.repair.write).toBe(false);
+    expect(previewResult.repair.files).toEqual([{ path: "input.txt", action: "restored" }]);
+    expect(await readFile(join(root, "input.txt"), "utf8")).toBe("new\n");
+    expect(JSON.parse(await readFile(recordPath, "utf8"))).toMatchObject({ state: "partial-commit" });
+
+    const applied = captureIo({ cwd: root });
+    expect(await main(["repair", recordPath, "--write", "--json"], applied.io)).toBe(0);
+    const appliedResult = JSON.parse(applied.stdout.join(""));
+    expect(appliedResult).toMatchObject({
+      command: "repair",
+      outcome: "repaired",
+      transactionId,
+      state: "rolled-back",
+    });
+    expect(appliedResult.repair.write).toBe(true);
+    expect(appliedResult.repair.files).toEqual([{ path: "input.txt", action: "restored" }]);
+    expect(await readFile(join(root, "input.txt"), "utf8")).toBe("old\n");
+    expect(JSON.parse(await readFile(recordPath, "utf8"))).toMatchObject({ state: "rolled-back" });
+  });
+});

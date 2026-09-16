@@ -77,3 +77,38 @@ rpst undo .tfs-ripast/transactions/TRANSACTION.json --write
 
 Undo refuses to overwrite files whose current hashes no longer match the
 transaction record.
+
+## `repair`
+
+Recover a partial-commit transaction from the retained before-images. Preview
+the assisted rollback, then explicitly apply it:
+
+```sh
+rpst repair .tfs-ripast/transactions/TRANSACTION.json
+rpst repair .tfs-ripast/transactions/TRANSACTION.json --write
+```
+
+Each file left mid-commit is classified as already matching its before-image,
+already matching its after-image, or blocked because it matches neither. A
+single blocked file prevents any restoration. With `--write`, the transaction
+record is updated to `rolled-back` once every restored file verifies. Add
+`--json` for the full classification report.
+
+## `gc`
+
+Prune retained before-images that can no longer serve an undo:
+
+```sh
+rpst gc
+rpst gc --write
+rpst gc --write --include-undoable --older-than 30
+rpst gc --write --remove-records
+```
+
+Before-images of transactions that can never be undone (`rolled-back`,
+`undone`, `failed`) are prunable by default. Before-images of `committed`
+transactions are still undoable and require `--include-undoable`, optionally
+limited with `--older-than DAYS`. A `partial-commit` transaction is never
+pruned; repair it first. Transaction JSON records are kept unless
+`--remove-records` is passed. Add `--json` for the full per-transaction
+report.

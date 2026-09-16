@@ -637,6 +637,36 @@ async function releaseLock(path: string, fs: TransactionFileSystem): Promise<voi
   await safeUnlink(path, fs);
 }
 
+/**
+ * Runs one repository-scoped operation under the transaction lock, reusing the
+ * stale-lock reclaim behaviour of the transaction engine. For maintenance
+ * commands (repair, gc) that never hold the lock across process death by
+ * design, this is the supported lock surface.
+ */
+export async function withRepositoryLock<T>(
+  root: string,
+  id: string,
+  fs: TransactionFileSystem,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const lockPath = await acquireLock(root, id, fs);
+  try {
+    return await operation();
+  } finally {
+    await releaseLock(lockPath, fs);
+  }
+}
+
+/** Persists one already-validated transaction record under the repository lock's directory discipline. */
+export async function persistTransactionRecord(
+  root: string,
+  record: TransactionRecord,
+  fs: TransactionFileSystem = nodeTransactionFileSystem,
+): Promise<void> {
+  validateTransactionRecordSemantics(record);
+  await persistRecord(root, record, fs);
+}
+
 async function writeExclusive(
   path: string,
   content: string | Uint8Array,
