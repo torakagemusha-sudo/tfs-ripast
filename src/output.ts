@@ -14,13 +14,13 @@ export type CliOutcome =
   | "verified"
   | "verification-failed"
   | "undone"
-  | "repaired"
-  | "pruned"
   | "conflict"
   | "invalid"
   | "provider-failure"
   | "failed"
-  | "partial-commit";
+  | "partial-commit"
+  | "repaired"
+  | "pruned";
 
 export interface CliResult {
   version: 1;
