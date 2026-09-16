@@ -14,6 +14,8 @@ export type CliOutcome =
   | "verified"
   | "verification-failed"
   | "undone"
+  | "repaired"
+  | "pruned"
   | "conflict"
   | "invalid"
   | "provider-failure"
