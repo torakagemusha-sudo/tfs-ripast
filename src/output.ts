@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { CorrelationResult, MatchClassification } from "./evidence.js";
+import type { GcReport, RepairReport } from "./maintenance.js";
 import { compareStrings } from "./order.js";
 import type { Diagnostic, EditPlan, ExpectedCount, TransactionRecord, ValidationSpec } from "./types.js";
 import type { UndoPreview, VerificationReport } from "./transaction.js";
@@ -37,6 +38,8 @@ export interface CliResult {
   verification?: VerificationReport;
   planning?: PlanningOutput;
   undoPreview?: UndoPreview;
+  repair?: RepairReport;
+  gc?: GcReport;
 }
 
 export interface RewritePolicyResult {
