@@ -293,6 +293,7 @@ export async function gcTransactions(options: GcOptions = {}): Promise<GcReport>
     let record: TransactionRecord;
     try {
       record = parseTransactionRecord(JSON.parse(await readFile(recordPath, "utf8")) as unknown);
+      validateTransactionRecordSemantics(record);
     } catch (error) {
       report.entries.push({
         id: basename(name, ".json"),
@@ -335,15 +336,25 @@ export async function gcTransactions(options: GcOptions = {}): Promise<GcReport>
     if (record.state === "partial-commit") {
       entry.reason = "partial-commit records are never pruned; run repair first.";
     }
-    if (write && prunable) {
-      await rm(beforeDirectory, { recursive: true, force: true });
-      entry.pruned.push(beforeDirectory);
-      if (options.removeRecords === true) {
-        await rm(recordPath, { force: true });
-        entry.recordRemoved = true;
-      }
-    }
     report.entries.push(entry);
+  }
+  if (write && report.entries.some((entry) => entry.prunable)) {
+    // Apply deletions under the repository lock so gc cannot race a concurrent
+    // commit, undo, or repair writing retained artifacts.
+    await withRepositoryLock(root, "gc", fs, async () => {
+      for (const entry of report.entries) {
+        if (!entry.prunable) {
+          continue;
+        }
+        const beforeDirectory = join(recordsDirectory, entry.id, "before");
+        await rm(beforeDirectory, { recursive: true, force: true });
+        entry.pruned.push(beforeDirectory);
+        if (options.removeRecords === true) {
+          await rm(join(recordsDirectory, `${entry.id}.json`), { force: true });
+          entry.recordRemoved = true;
+        }
+      }
+    });
   }
   const prunedCount = report.entries.filter((entry) => entry.pruned.length > 0).length;
   report.diagnostics.push(
