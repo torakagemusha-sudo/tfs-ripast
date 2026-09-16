@@ -160,7 +160,7 @@ describe("compiled CLI end to end", () => {
   it.each([
     ["yes", "y\n", "new\n"],
     ["no", "n\n", "old\n"],
-    ["EOF", "", "old\n"],
+    ["EOF", "\u0004", "old\n"],
   ])("honors a real TTY %s response", async (_label, input, expected) => {
     const root = await temporaryDirectory("tfs-ripast-e2e-pty-");
     await writeFile(join(root, "input.txt"), "old\n", "utf8");
