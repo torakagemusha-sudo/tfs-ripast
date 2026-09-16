@@ -39,6 +39,7 @@ import {
 import { RipgrepProvider } from "./providers/ripgrep.js";
 import { ProcessSpawnError, runArgumentVector } from "./providers/process.js";
 import { parseEditPlan, parseRewritePlan, parseTransactionRecord } from "./schema.js";
+import { gcTransactions, repairTransaction } from "./maintenance.js";
 import {
   appendPreparedTransactionValidations,
   commitTransaction,
@@ -193,7 +194,30 @@ interface UndoCommand extends CommonOptions {
   source: string;
 }
 
-type ParsedCommand = RewriteCommand | PlanCommand | InspectCommand | ApplyCommand | VerifyCommand | UndoCommand;
+interface RepairCommand extends CommonOptions {
+  kind: "repair";
+  source: string;
+}
+
+interface GcCommand {
+  kind: "gc";
+  json: boolean;
+  dryRun: boolean;
+  write: boolean;
+  includeUndoable: boolean;
+  removeRecords: boolean;
+  olderThanDays?: number;
+}
+
+type ParsedCommand =
+  | RewriteCommand
+  | PlanCommand
+  | InspectCommand
+  | ApplyCommand
+  | VerifyCommand
+  | UndoCommand
+  | RepairCommand
+  | GcCommand;
 
 export const VERSION = "0.1.1";
 
@@ -208,6 +232,8 @@ Commands:
   tfs-ripast apply EDIT-PLAN.json                 Revalidate and apply a saved plan
   tfs-ripast verify TRANSACTION.json              Verify committed file hashes
   tfs-ripast undo TRANSACTION.json                Preview or apply a safe rollback
+  tfs-ripast repair TRANSACTION.json              Recover a partial-commit transaction
+  tfs-ripast gc [--write]                         Prune dead transaction storage
 
 Core options:
   --regex                    Interpret --search as a regular expression
@@ -234,7 +260,8 @@ caller-supplied -- before path operands.
 
 function commandName(argv: readonly string[]): ParsedCommand["kind"] {
   const first = argv[0];
-  return first === "plan" || first === "inspect" || first === "apply" || first === "verify" || first === "undo"
+  return first === "plan" || first === "inspect" || first === "apply" || first === "verify" ||
+    first === "undo" || first === "repair" || first === "gc"
     ? first
     : "rewrite";
 }
@@ -382,7 +409,8 @@ function hasRewriteExecutionOptions(options: CommonOptions): boolean {
 }
 
 function parseSavedCommand(
-  kind: PlanCommand["kind"] | InspectCommand["kind"] | ApplyCommand["kind"] | VerifyCommand["kind"] | UndoCommand["kind"],
+  kind: PlanCommand["kind"] | InspectCommand["kind"] | ApplyCommand["kind"] | VerifyCommand["kind"] |
+    UndoCommand["kind"] | RepairCommand["kind"],
   argv: readonly string[],
   state: ArgumentParseState,
 ): ParsedCommand {
@@ -423,18 +451,80 @@ function parseSavedCommand(
     }
     return { kind, source, json: common.json };
   }
-  if ((kind === "apply" || kind === "undo") && common.planOut !== undefined) {
+  if ((kind === "apply" || kind === "undo" || kind === "repair") && common.planOut !== undefined) {
     throw new Error(`${kind} does not accept plan-output options.`);
   }
-  if (kind === "undo" && hasRewriteExecutionOptions(common)) {
-    throw new Error("undo does not accept rewrite scoping or validation options.");
+  if ((kind === "undo" || kind === "repair") && hasRewriteExecutionOptions(common)) {
+    throw new Error(`${kind} does not accept rewrite scoping or validation options.`);
   }
   assertWriteMode(common);
   return { kind, source, ...common };
 }
 
+function parseGcCommand(argv: readonly string[], state: ArgumentParseState): GcCommand {
+  const command: GcCommand = {
+    kind: "gc",
+    json: false,
+    dryRun: false,
+    write: false,
+    includeUndoable: false,
+    removeRecords: false,
+  };
+  for (let index = 1; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === undefined) {
+      continue;
+    }
+    if (argument === "--json") {
+      command.json = true;
+      state.json = true;
+      continue;
+    }
+    if (argument === "--dry-run") {
+      command.dryRun = true;
+      continue;
+    }
+    if (argument === "--write") {
+      command.write = true;
+      continue;
+    }
+    if (argument === "--include-undoable") {
+      command.includeUndoable = true;
+      continue;
+    }
+    if (argument === "--remove-records") {
+      command.removeRecords = true;
+      continue;
+    }
+    if (argument === "--older-than") {
+      const value = requiredValue(argv, index, argument);
+      const days = Number(value);
+      if (!Number.isFinite(days) || days < 0) {
+        throw new Error("--older-than requires a non-negative number of days.");
+      }
+      command.olderThanDays = days;
+      index += 1;
+      continue;
+    }
+    if (argument === "--") {
+      throw new Error("gc does not accept positional arguments.");
+    }
+    if (argument.startsWith("-")) {
+      throw new Error(`Unknown option for gc: ${argument}`);
+    }
+    throw new Error(`Unknown argument for gc: ${argument}`);
+  }
+  if (command.dryRun && command.write) {
+    throw new Error("--dry-run and --write are mutually exclusive.");
+  }
+  return command;
+}
+
 function parseArguments(argv: readonly string[], state: ArgumentParseState): ParsedCommand {
   const kind = commandName(argv);
+  if (kind === "gc") {
+    return parseGcCommand(argv, state);
+  }
   if (kind !== "rewrite") {
     return parseSavedCommand(kind, argv, state);
   }
@@ -2079,6 +2169,68 @@ async function runUndo(command: UndoCommand, io: CliIo, cwd: string, runtime: Cl
   return exitCode;
 }
 
+async function runRepair(command: RepairCommand, io: CliIo, cwd: string, runtime: CliRuntime): Promise<number> {
+  const record = await loadTransaction(command.source, io, cwd);
+  const report = await repairTransaction(record, {
+    root: cwd,
+    write: command.write,
+    ...(runtime.fileSystem === undefined ? {} : { fileSystem: runtime.fileSystem }),
+  });
+  for (const diagnostic of report.diagnostics) {
+    io.stderr(`${diagnostic}\n`);
+  }
+  const result: CliResult = {
+    version: 1,
+    command: "repair",
+    outcome: report.ok ? "repaired" : "failed",
+    exitCode: report.ok ? 0 : 1,
+    transactionId: record.id,
+    state: report.record?.state ?? record.state,
+  };
+  const human = report.files.length === 0
+    ? undefined
+    : `${report.files.map((file) =>
+      `- ${file.path}: ${file.action}${file.reason === undefined ? "" : ` (${file.reason})`}`).join("\n")}\n`;
+  emitResult(
+    io,
+    command.json,
+    result,
+    report.ok
+      ? report.record === undefined
+        ? human
+        : `${human ?? ""}Transaction ${report.record.id} marked ${report.record.state}.\n`
+      : human,
+  );
+  return result.exitCode;
+}
+
+async function runGc(command: GcCommand, io: CliIo, cwd: string, runtime: CliRuntime): Promise<number> {
+  const report = await gcTransactions({
+    root: cwd,
+    write: command.write,
+    includeUndoable: command.includeUndoable,
+    ...(command.olderThanDays === undefined ? {} : { olderThanMs: command.olderThanDays * 24 * 60 * 60 * 1000 }),
+    removeRecords: command.removeRecords,
+    ...(runtime.fileSystem === undefined ? {} : { fileSystem: runtime.fileSystem }),
+  });
+  for (const diagnostic of report.diagnostics) {
+    io.stderr(`${diagnostic}\n`);
+  }
+  const result: CliResult = {
+    version: 1,
+    command: "gc",
+    outcome: "pruned",
+    exitCode: 0,
+  };
+  const human = report.entries.length === 0
+    ? undefined
+    : `${report.entries.map((entry) =>
+      `- ${entry.id} (${entry.state}): ${entry.prunable ? (command.write ? "pruned" : "prunable") : "kept"}` +
+      `${entry.reason === undefined ? "" : ` — ${entry.reason}`}`).join("\n")}\n`;
+  emitResult(io, command.json, result, human);
+  return 0;
+}
+
 function failureDetails(error: unknown): { exitCode: number; outcome: CliOutcome; message: string } {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ProviderExecutionError || error instanceof ProcessSpawnError) {
@@ -2113,6 +2265,12 @@ export async function main(
     }
     if (command.kind === "undo") {
       return await runUndo(command, io, cwd, runtime);
+    }
+    if (command.kind === "repair") {
+      return await runRepair(command, io, cwd, runtime);
+    }
+    if (command.kind === "gc") {
+      return await runGc(command, io, cwd, runtime);
     }
     if (command.kind === "rewrite") {
       const resolved = await resolveEditPlan(adHocPlan(command, cwd), cwd, runtime, command);
